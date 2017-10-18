@@ -4,6 +4,11 @@ cmake_minimum_required ( VERSION 2.8.12 )
 # project
 project ( wilton_net CXX )
 
+if ( STATICLIB_TOOLCHAIN MATCHES "windows_[^_]+_[^_]+" )
+    staticlib_add_subdirectory ( ${STATICLIB_DEPS}/external_asio )
+elseif ( WILTON_BUILD_FLAVOUR MATCHES "wheezy" )
+    staticlib_add_subdirectory ( ${STATICLIB_DEPS}/external_asio )
+endif ( )
 set ( ${PROJECT_NAME}_DEPS
         staticlib_config
         staticlib_support
