@@ -14,8 +14,15 @@
 #include "staticlib/utils.hpp"
 
 #include "wilton/support/alloc_copy.hpp"
+#include "wilton/support/logging.hpp"
 
 #include "tcp_connect_checker.hpp"
+
+namespace { // anonymous
+
+const std::string LOGGER = std::string("wilton.net");
+
+} // namespace
 
 char* wilton_net_wait_for_tcp_connection(const char* ip_addr, int ip_addr_len, 
         int tcp_port, int timeout_millis) /* noexcept */ {
@@ -27,12 +34,15 @@ char* wilton_net_wait_for_tcp_connection(const char* ip_addr, int ip_addr_len,
     if (!sl::support::is_uint32_positive(timeout_millis)) return wilton::support::alloc_copy(TRACEMSG(
             "Invalid 'timeout_millis' parameter specified: [" + sl::support::to_string(timeout_millis) + "]"));
     try {
-        uint32_t ip_addr_len_u32 = static_cast<uint32_t> (ip_addr_len);
-        std::string ip_addr_str{ip_addr, ip_addr_len_u32};
+        auto ip_addr_str = std::string(ip_addr, static_cast<uint32_t> (ip_addr_len));
         uint16_t tcp_port_u16 = static_cast<uint16_t> (tcp_port);
         uint32_t timeout_millis_u32 = static_cast<uint32_t> (timeout_millis);
         std::chrono::milliseconds timeout{timeout_millis_u32};
+        wilton::support::log_debug(LOGGER, "Awaiting TCP connection, IP: [" + ip_addr_str + "]," +
+                " port: [" + sl::support::to_string(tcp_port_u16) + "]," +
+                " timeout: [" + sl::support::to_string(timeout_millis_u32) + "]...");
         std::string err = wilton::net::tcp_connect_checker::wait_for_connection(timeout, ip_addr_str, tcp_port_u16);
+        wilton::support::log_debug(LOGGER, "TCP connection wait complete, result: [" + err + "]");
         if (err.empty()) {
             return nullptr;
         } else {
