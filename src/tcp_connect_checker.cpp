@@ -94,8 +94,8 @@ private:
             timer.expires_from_now(timeout);
             socket.async_connect(endpoint, [&](const std::error_code& ec) {
                 std::lock_guard<std::mutex> guard{mutex};
-                if (connect_cancelled) return;
-                timer_cancelled = true;
+                if (connect_cancelled.load(std::memory_order_acquire)) return;
+                timer_cancelled.store(true, std::memory_order_release);
                 timer.cancel();
                 if(ec) {
                     error_message = "ERROR: " + ec.message() + " (" + sl::support::to_string(ec.value()) + ")";
@@ -103,8 +103,8 @@ private:
             });
             timer.async_wait([&](const std::error_code&) {
                 std::lock_guard<std::mutex> guard{mutex};
-                if (timer_cancelled) return;
-                connect_cancelled = true;
+                if (timer_cancelled.load(std::memory_order_acquire)) return;
+                connect_cancelled.store(true, std::memory_order_release);
                 socket.close();
                 error_message = "ERROR: Connection timed out (-1)";
             });
