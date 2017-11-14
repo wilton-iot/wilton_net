@@ -38,8 +38,6 @@ namespace net {
 
 namespace { // anonymous
 
-namespace sc = staticlib::config;
-
 const std::chrono::milliseconds attempt_timeout = std::chrono::milliseconds(100);
 
 } // namespace
