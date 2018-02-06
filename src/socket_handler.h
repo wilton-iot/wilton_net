@@ -47,7 +47,7 @@ public:
     void open(std::string ip, uint16_t port);
     void close();
     std::string write(const char* buffer, const int& buffer_len);
-    std::string read(char* out, int& out_len);
+    std::string read(char** out, int& out_len);
 };
 
 }

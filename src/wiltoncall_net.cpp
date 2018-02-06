@@ -5,6 +5,8 @@
  * Created on October 17, 2017, 8:59 PM
  */
 
+#include <iostream>
+
 #include "wilton/wilton_net.h"
 
 #include "staticlib/config.hpp"
@@ -68,11 +70,9 @@ support::buffer wait_for_tcp_connection(sl::io::span<const char> data) {
 
 // ASIO TCP/UDP API
 
-// socket_open
 support::buffer socket_open(sl::io::span<const char> data) {
     // json parse
     auto json = sl::json::load(data);
-    int64_t timeout = -1;
     auto rip = std::ref(sl::utils::empty_string()); // ref to ip string
     int64_t port = -1;
     for (const sl::json::field& fi : json.as_object()) {
@@ -81,28 +81,26 @@ support::buffer socket_open(sl::io::span<const char> data) {
             rip = fi.as_string_nonempty_or_throw(name);
         } else if ("tcpPort" == name) {
             port = fi.as_int64_or_throw(name);
-        } else if ("timeoutMillis" == name) {
-            timeout = fi.as_int64_or_throw(name);
-        } else {
+        }  else {
             throw support::exception(TRACEMSG("Unknown data field: [" + name + "]"));
         }
     }
-    if (-1 == timeout) throw support::exception(TRACEMSG(
-            "Required parameter 'timeoutMillis' not specified"));
+    // check json data
     if (rip.get().empty()) throw support::exception(TRACEMSG(
             "Required parameter 'ipAddress' not specified"));
     if (-1 == port) throw support::exception(TRACEMSG(
             "Required parameter 'tcpPort' not specified"));
+    // get handle
     const std::string& ip = rip.get();
-
     wilton_socket_handler* socket;
     char* err = wilton_net_socket_open(std::addressof(socket), ip.c_str(), static_cast<int>(ip.length()),
-            static_cast<int> (port), static_cast<int> (timeout));
+            static_cast<int> (port));
     if (nullptr != err) {
         support::throw_wilton_error(err, TRACEMSG(err));
     }
     auto reg = shared_socket_registry();
     int64_t handle = reg->put(socket);
+    std::cout << "writed handler: [" << handle << "]" << std::endl;
 
     return support::make_json_buffer({
         { "connectionHandle", handle}
@@ -122,6 +120,7 @@ support::buffer socket_close(sl::io::span<const char> data) {
             throw support::exception(TRACEMSG("Unknown data field: [" + name + "]"));
         }
     }
+    // check json data
     if (-1 == handle) throw support::exception(TRACEMSG(
             "Required parameter 'connectionHandle' not specified"));
     // get handle
@@ -130,7 +129,6 @@ support::buffer socket_close(sl::io::span<const char> data) {
     if (nullptr == socket) throw support::exception(TRACEMSG(
             "Invalid 'connectionHandle' parameter specified"));
     char* err = wilton_net_socket_close(socket);
-//    reg->put(socket); // возможно стоит удалить тут обработчик сокета а не вставлять его занова
     if (nullptr != err) support::throw_wilton_error(err, TRACEMSG(err +
             "\nwilton_net_socket_close error for input data"));
 
@@ -142,7 +140,7 @@ support::buffer socket_write(sl::io::span<const char> data) {
     auto json = sl::json::load(data);
     int64_t handle = -1;
     auto req_message_data = std::ref(sl::utils::empty_string());
-//    int32_t data_len = -1;
+
     for (const sl::json::field& fi : json.as_object()) {
         auto& name = fi.name();
         if ("connectionHandle" == name) {
@@ -165,14 +163,11 @@ support::buffer socket_write(sl::io::span<const char> data) {
     wilton_socket_handler* socket = reg->remove(handle);
     if (nullptr == socket) throw support::exception(TRACEMSG(
             "Invalid 'connectionHandle' parameter specified"));
-    // call wilton
-//    char* out = nullptr;
-//    int out_len = 0;
+
     char* err = wilton_net_socket_write(socket, message_data.c_str(), static_cast<int>(message_data.length()));
     reg->put(socket);
 
     if (nullptr != err) support::throw_wilton_error(err, TRACEMSG(err));
-//    return support::wrap_wilton_buffer(out, out_len);
 
     return support::make_empty_buffer();
 }
@@ -181,11 +176,13 @@ support::buffer socket_read(sl::io::span<const char> data) {
     // json parse
     auto json = sl::json::load(data);
     int64_t handle = -1;
-//    int32_t data_len = -1;
+    int32_t buffer_size = -1;
     for (const sl::json::field& fi : json.as_object()) {
         auto& name = fi.name();
         if ("connectionHandle" == name) {
             handle = fi.as_int64_or_throw(name);
+        } else if ("buffer_size" == name) {
+            buffer_size = fi.as_int32_or_throw(name);
         } else {
             throw support::exception(TRACEMSG("Unknown data field: [" + name + "]"));
         }
@@ -193,16 +190,17 @@ support::buffer socket_read(sl::io::span<const char> data) {
     // check json data
     if (-1 == handle) throw support::exception(TRACEMSG(
             "Required parameter 'connectionHandle' not specified"));
+    if (-1 == buffer_size) throw support::exception(TRACEMSG(
+            "Required parameter 'buffer_size' not specified"));
 
     // get handle
     auto reg = shared_socket_registry();
     wilton_socket_handler* socket = reg->remove(handle);
     if (nullptr == socket) throw support::exception(TRACEMSG(
             "Invalid 'connectionHandle' parameter specified"));
-    // call wilton
-    char* out = nullptr;
-    int out_len = 0;
-    char* err = wilton_net_socket_read(socket, out, out_len);
+    int out_len = buffer_size; // max msg length
+    char* out = new char[out_len]; // will be deleted by wilton_free
+    char* err = wilton_net_socket_read(socket, std::addressof(out), out_len);
     reg->put(socket);
 
     if (nullptr != err) support::throw_wilton_error(err, TRACEMSG(err));

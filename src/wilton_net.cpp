@@ -78,19 +78,16 @@ char* wilton_net_socket_open(
         wilton_socket_handler** handler,
         const char* ip_addr,
         int ip_addr_len,
-        int tcp_port,
-        int timeout_millis) {
+        int tcp_port) {
 
     std::string ip(ip_addr, ip_addr_len);
-
+    // TODO: добавить задание типа протокола
     wilton::net::socket_handler socket(wilton::net::ip_protocol::IP_TCP);
     wilton_socket_handler* socket_ptr = new wilton_socket_handler{std::move(socket)};
 
     *handler = socket_ptr;
-    socket.open(ip, tcp_port);
-    timeout_millis++;
-    // Добавить проверку на ошибки c djpdhfnjv htpekmnfnf hf,jns
-    // Добавить обработку таймаута?
+    socket_ptr->impl().open(ip, tcp_port);
+    // TODO: Добавить проверку на ошибки
 
     return nullptr;
 }
@@ -127,7 +124,7 @@ char* wilton_net_socket_write(
     }
 }
 
-char* wilton_net_socket_read(wilton_socket_handler* handler, char* out_data, int& data_len) {
+char* wilton_net_socket_read(wilton_socket_handler* handler, char** out_data, int& data_len) {
     if (nullptr == handler) return wilton::support::alloc_copy(TRACEMSG("Null 'handler' parameter specified"));
     // check data ???
 
@@ -135,7 +132,7 @@ char* wilton_net_socket_read(wilton_socket_handler* handler, char* out_data, int
     try {
         wilton::support::log_debug(LOGGER, "Read data from socket, handle: [" + wilton::support::strhandle(handler) + "] ...");
         handler->impl().read(out_data, data_len);
-        wilton::support::log_debug(LOGGER, "Write operation complete. Data: \n[" + std::string(out_data, data_len) +  " ]");
+        wilton::support::log_debug(LOGGER, "Write operation complete. Data: \n[" + std::string(*out_data, data_len) +  " ]");
         return nullptr;
     } catch (const std::exception& e) {
         return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
