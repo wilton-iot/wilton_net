@@ -10,13 +10,17 @@
 #include "wilton/wilton_net.h"
 
 #include "staticlib/config.hpp"
+#include "staticlib/io.hpp"
 #include "staticlib/json.hpp"
+#include "staticlib/utils.hpp"
+#include "staticlib/support.hpp"
 #include "staticlib/utils.hpp"
 
 #include "wilton/support/handle_registry.hpp"
 #include "wilton/support/buffer.hpp"
 #include "wilton/support/exception.hpp"
 #include "wilton/support/registrar.hpp"
+
 
 namespace wilton {
 namespace net {
@@ -74,6 +78,7 @@ support::buffer socket_open(sl::io::span<const char> data) {
     // json parse
     auto json = sl::json::load(data);
     auto rip = std::ref(sl::utils::empty_string()); // ref to ip string
+    auto ref_protocol_type = std::ref(sl::utils::empty_string()); // ref to protocolType string
     int64_t port = -1;
     for (const sl::json::field& fi : json.as_object()) {
         auto& name = fi.name();
@@ -81,6 +86,8 @@ support::buffer socket_open(sl::io::span<const char> data) {
             rip = fi.as_string_nonempty_or_throw(name);
         } else if ("tcpPort" == name) {
             port = fi.as_int64_or_throw(name);
+        } else if ("protocolType" == name) {
+            ref_protocol_type = fi.as_string_nonempty_or_throw(name);
         }  else {
             throw support::exception(TRACEMSG("Unknown data field: [" + name + "]"));
         }
@@ -90,11 +97,15 @@ support::buffer socket_open(sl::io::span<const char> data) {
             "Required parameter 'ipAddress' not specified"));
     if (-1 == port) throw support::exception(TRACEMSG(
             "Required parameter 'tcpPort' not specified"));
+    if (ref_protocol_type.get().empty()) throw support::exception(TRACEMSG(
+            "Required parameter 'protocolType' not specified"));
     // get handle
     const std::string& ip = rip.get();
+    const std::string& protocol_type = ref_protocol_type.get();
+
     wilton_socket_handler* socket;
     char* err = wilton_net_socket_open(std::addressof(socket), ip.c_str(), static_cast<int>(ip.length()),
-            static_cast<int> (port));
+            static_cast<int> (port), protocol_type.c_str(), static_cast<int>(protocol_type.length()));
     if (nullptr != err) {
         support::throw_wilton_error(err, TRACEMSG(err));
     }
@@ -139,30 +150,43 @@ support::buffer socket_write(sl::io::span<const char> data) {
     // json parse
     auto json = sl::json::load(data);
     int64_t handle = -1;
-    auto req_message_data = std::ref(sl::utils::empty_string());
-
+    auto ref_message_data = std::ref(sl::utils::empty_string());
+    auto hex = false;
     for (const sl::json::field& fi : json.as_object()) {
         auto& name = fi.name();
         if ("connectionHandle" == name) {
             handle = fi.as_int64_or_throw(name);
         } else if ("message_data" == name) {
-            req_message_data = fi.as_string_nonempty_or_throw(name);
+            ref_message_data = fi.as_string_nonempty_or_throw(name);
+        } else if ("hex" == name) {
+            hex = fi.as_bool_or_throw(name);
         } else {
             throw support::exception(TRACEMSG("Unknown data field: [" + name + "]"));
         }
     }
-    // check json data
+    // check json data, 'hex' is optional
     if (-1 == handle) throw support::exception(TRACEMSG(
             "Required parameter 'connectionHandle' not specified"));
-    if (req_message_data.get().empty()) throw support::exception(TRACEMSG(
+    if (ref_message_data.get().empty()) throw support::exception(TRACEMSG(
             "Required parameter 'message_data' not specified"));
-    const std::string& message_data = req_message_data.get();
+    std::string message_data = ref_message_data.get();
 
     // get handle
     auto reg = shared_socket_registry();
     wilton_socket_handler* socket = reg->remove(handle);
     if (nullptr == socket) throw support::exception(TRACEMSG(
             "Invalid 'connectionHandle' parameter specified"));
+
+    if (hex) {
+        // Make string class sink
+        auto sink_hex = sl::io::string_sink();
+        // Make duffer from message string
+        auto src = sl::io::make_buffered_source(sl::io::string_source(message_data));
+        // Convert string to HEX buffer
+        sl::io::copy_to_hex(src, sink_hex);
+        // write HEX string to message string
+        message_data = sink_hex.get_string();
+    }
 
     char* err = wilton_net_socket_write(socket, message_data.c_str(), static_cast<int>(message_data.length()));
     reg->put(socket);
@@ -177,17 +201,20 @@ support::buffer socket_read(sl::io::span<const char> data) {
     auto json = sl::json::load(data);
     int64_t handle = -1;
     int32_t buffer_size = -1;
+    auto hex = false;
     for (const sl::json::field& fi : json.as_object()) {
         auto& name = fi.name();
         if ("connectionHandle" == name) {
             handle = fi.as_int64_or_throw(name);
         } else if ("buffer_size" == name) {
             buffer_size = fi.as_int32_or_throw(name);
+        } else if ("hex" == name) {
+            hex = fi.as_bool_or_throw(name);
         } else {
             throw support::exception(TRACEMSG("Unknown data field: [" + name + "]"));
         }
     }
-    // check json data
+    // check json data, 'hex' is optional
     if (-1 == handle) throw support::exception(TRACEMSG(
             "Required parameter 'connectionHandle' not specified"));
     if (-1 == buffer_size) throw support::exception(TRACEMSG(
@@ -204,6 +231,15 @@ support::buffer socket_read(sl::io::span<const char> data) {
     reg->put(socket);
 
     if (nullptr != err) support::throw_wilton_error(err, TRACEMSG(err));
+
+    if (hex) {
+        // create string from output
+        auto readed_msg = std::string(out, out_len);
+        // make Source class from that string.
+        auto src = sl::io::make_buffered_source(sl::io::string_source(readed_msg));
+        // Return HEX data in buffer
+        return support::make_hex_buffer(src);
+    }
 
     return support::wrap_wilton_buffer(out, out_len);
 }

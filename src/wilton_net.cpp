@@ -22,7 +22,6 @@
 #include "wilton/support/buffer.hpp"
 #include "wilton/support/handle_registry.hpp"
 
-
 #include "tcp_connect_checker.hpp"
 #include "socket_handler.h"
 
@@ -74,51 +73,91 @@ char* wilton_net_wait_for_tcp_connection(const char* ip_addr, int ip_addr_len,
     }
 }
 
-char* wilton_net_socket_open(
-        wilton_socket_handler** handler,
-        const char* ip_addr,
-        int ip_addr_len,
-        int tcp_port) {
+char* wilton_net_socket_open(wilton_socket_handler** handler, const char* ip_addr,
+        int ip_addr_len, int tcp_port, const char* type_str, int type_str_len) {
+    // check params
+    if (nullptr == handler) return wilton::support::alloc_copy(TRACEMSG("Null 'handler' parameter specified"));
+    if (nullptr == ip_addr) return wilton::support::alloc_copy(TRACEMSG("Null 'ip_addr' parameter specified"));
+    if (!sl::support::is_uint32(ip_addr_len)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'ip_addr_len' parameter specified: [" + sl::support::to_string(ip_addr_len) + "]"));
+    if (!sl::support::is_uint16_positive(tcp_port)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'tcp_port' parameter specified: [" + sl::support::to_string(tcp_port) + "]"));
+    if (nullptr == type_str) return wilton::support::alloc_copy(TRACEMSG("Null 'type_str' parameter specified"));
+    if (!sl::support::is_uint32(type_str_len)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'type_str_len' parameter specified: [" + sl::support::to_string(type_str_len) + "]"));
 
-    std::string ip(ip_addr, ip_addr_len);
-    // TODO: добавить задание типа протокола
-    wilton::net::socket_handler socket(wilton::net::ip_protocol::IP_TCP);
-    wilton_socket_handler* socket_ptr = new wilton_socket_handler{std::move(socket)};
+    try {
+        // check UDP/TCP type
+        std::string type_literal(type_str, type_str_len);
+        wilton::net::ip_protocol type;
+        if (!type_literal.compare("TCP")) {
+            type = wilton::net::ip_protocol::TCP;
+        } else if (!type_literal.compare("UDP")) {
+            type = wilton::net::ip_protocol::UDP;
+        } else {
+            return wilton::support::alloc_copy(TRACEMSG("Invalid 'protocolType' parameter specified: [" +
+                    type_literal + "]. Should be TCP/UDP"));
+        }
 
-    *handler = socket_ptr;
-    socket_ptr->impl().open(ip, tcp_port);
-    // TODO: Добавить проверку на ошибки
+        std::string ip(ip_addr, ip_addr_len);
 
-    return nullptr;
+        wilton::net::socket_handler socket(type);
+        wilton_socket_handler* socket_ptr = new wilton_socket_handler{std::move(socket)};
+
+        *handler = socket_ptr; // setup pointer to socket for next use
+        wilton::support::log_debug(LOGGER, "Awaiting " + type_literal + " connection, IP: [" + ip + "]," +
+                " port: [" + sl::support::to_string(tcp_port) + "] ...");
+
+        std::error_code err = socket_ptr->impl().open(ip, tcp_port);
+
+        wilton::support::log_debug(LOGGER, type_literal + " connection wait complete, result: [" + err.message() + "]");
+        if (!err) { // if error code is 0
+            return nullptr;
+        } else {
+            return wilton::support::alloc_copy(err.message());
+        }
+    } catch (const std::exception& e) {
+        return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
+    }
 }
 
 char* wilton_net_socket_close(wilton_socket_handler* handler) {
     if (nullptr == handler) return wilton::support::alloc_copy(TRACEMSG("Null 'handler' parameter specified"));
     try {
         wilton::support::log_debug(LOGGER, "Closing connection, handle: [" + wilton::support::strhandle(handler) + "] ...");
-        handler->impl().close();
+
+        std::error_code err = handler->impl().close();
         delete handler;
-        wilton::support::log_debug(LOGGER, "Connection closed");
-        return nullptr;
+
+        wilton::support::log_debug(LOGGER, "Connection closed, result: [" + err.message() + "]");
+        if (!err) { // if error code is 0
+            return nullptr;
+        } else {
+            return wilton::support::alloc_copy(err.message());
+        }
     } catch (const std::exception& e) {
         return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
     }
 }
 
-char* wilton_net_socket_write(
-        wilton_socket_handler* handler,
-        const char* data,
-        int data_len){
+char* wilton_net_socket_write(wilton_socket_handler* handler, const char* data, int data_len){
     if (nullptr == handler) return wilton::support::alloc_copy(TRACEMSG("Null 'handler' parameter specified"));
-    // check data ???
-
+    if (nullptr == data) return wilton::support::alloc_copy(TRACEMSG("Null 'data' parameter specified"));
+    if (!sl::support::is_uint32(data_len)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'data_len' parameter specified: [" + sl::support::to_string(data_len) + "]"));
     // try to send data
     try {
         wilton::support::log_debug(LOGGER, "Write data to socket, handle: [" + wilton::support::strhandle(handler) + "]" +
                 "\n[" + std::string(data, data_len) +  " ]");
-        handler->impl().write(data, data_len);
-        wilton::support::log_debug(LOGGER, "Write operation complete");
-        return nullptr;
+
+        std::error_code err = handler->impl().write(data, data_len);
+
+        wilton::support::log_debug(LOGGER, "Write operation complete, result: [" + err.message() + "]");
+        if (!err) { // if error code is 0
+            return nullptr;
+        } else {
+            return wilton::support::alloc_copy(err.message());
+        }
     } catch (const std::exception& e) {
         return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
     }
@@ -126,14 +165,24 @@ char* wilton_net_socket_write(
 
 char* wilton_net_socket_read(wilton_socket_handler* handler, char** out_data, int& data_len) {
     if (nullptr == handler) return wilton::support::alloc_copy(TRACEMSG("Null 'handler' parameter specified"));
-    // check data ???
+    if (nullptr == out_data) return wilton::support::alloc_copy(TRACEMSG("Null 'out_data' parameter specified"));
+    if (!sl::support::is_uint32(data_len)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'data_len' parameter specified: [" + sl::support::to_string(data_len) + "]"));
 
     // try to read data
     try {
-        wilton::support::log_debug(LOGGER, "Read data from socket, handle: [" + wilton::support::strhandle(handler) + "] ...");
-        handler->impl().read(out_data, data_len);
-        wilton::support::log_debug(LOGGER, "Write operation complete. Data: \n[" + std::string(*out_data, data_len) +  " ]");
-        return nullptr;
+        wilton::support::log_debug(LOGGER, "Read data from socket, handle: [" +
+                wilton::support::strhandle(handler) + "] ...");
+
+        std::error_code err = handler->impl().read(out_data, data_len);
+
+        wilton::support::log_debug(LOGGER, "Write operation complete. Data: \n[" +
+                std::string(*out_data, data_len) + " ], result: [" + err.message() + "]");
+        if (!err) { // if error code is 0
+            return nullptr;
+        } else {
+            return wilton::support::alloc_copy(err.message());
+        }
     } catch (const std::exception& e) {
         return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
     }

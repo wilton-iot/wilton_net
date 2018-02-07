@@ -27,6 +27,9 @@
 namespace wilton {
 namespace net {
 
+namespace {
+    const int no_flag = 0;
+}
 
 class socket_handler::impl : public staticlib::pimpl::object::impl {
 private:
@@ -41,101 +44,88 @@ public:
     current_type(type) {
     }
 
-    void open(socket_handler&, std::string ip, uint16_t port){
+    std::error_code open(socket_handler&, std::string ip, uint16_t port){
         asio::error_code ec;
 
-        std::cout << "open socket" <<std::endl;
+        switch (current_type){
+            case ip_protocol::TCP: {
+                asio::ip::tcp::endpoint end_point(asio::ip::address_v4::from_string(ip), port);
+                tcp_socket.connect(end_point, ec);
+                break;
+            }
+            case ip_protocol::UDP:{
+                asio::ip::udp::endpoint end_point(asio::ip::address_v4::from_string(ip), port);
+                udp_socket.connect(end_point, ec);
+                break;
+            }
+        }
 
-        switch (current_type){
-        case ip_protocol::IP_TCP: {
-            asio::ip::tcp::endpoint end_point(asio::ip::address_v4::from_string(ip), port);
-            std::cout << "ecndpoint created" <<std::endl;
-            tcp_socket.connect(end_point, ec);
-            std::cout << "socket connect" <<std::endl;
-            break;
-        }
-        case ip_protocol::IP_UDP:{
-            asio::ip::udp::endpoint end_point(asio::ip::address_v4::from_string(ip), port);
-            udp_socket.connect(end_point, ec);
-            break;
-        }
-        }
-        std::cout << "opened socket" <<std::endl;
-        std::cout << "ec: [" << ec.message() << "]" <<std::endl;
+        return ec;
     }
-    void close(socket_handler&){
+    std::error_code close(socket_handler&){
+        asio::error_code ec;
         switch (current_type){
-        case ip_protocol::IP_TCP: {
-            tcp_socket.close();
-            break;
+            case ip_protocol::TCP: {
+                tcp_socket.close(ec);
+                break;
+            }
+            case ip_protocol::UDP:{
+                udp_socket.close(ec);
+                break;
+            }
         }
-        case ip_protocol::IP_UDP:{
-            udp_socket.close();
-            break;
-        }
-        }
+        return ec;
     }
-    std::string write(socket_handler&, const char* buffer, const int& buffer_len){ // returns error message
+    std::error_code write(socket_handler&, const char* buffer, const int& buffer_len){ // returns error message
         std::string error_message = "";
         asio::error_code ec;
 
         auto data = asio::buffer((buffer), buffer_len);
         switch (current_type){
-        case ip_protocol::IP_TCP: {
-            tcp_socket.send(data, 0, ec);
-            break;
-        }
-        case ip_protocol::IP_UDP:{
-            udp_socket.send(data, 0, ec);
-            break;
-        }
+            case ip_protocol::TCP: {
+                tcp_socket.send(data, no_flag, ec);
+                break;
+            }
+            case ip_protocol::UDP:{
+                udp_socket.send(data, no_flag, ec);
+                break;
+            }
         }
         if (ec) {
             error_message.assign(ec.message());
             std::cout << error_message << std::endl;
         }
 
-        return error_message;
+        return ec;
     }
-    std::string read(socket_handler&, char** out, int& out_len){ // TODO: правильное получение данных
-        std::string error_message = "";
+    std::error_code read(socket_handler&, char** out, int& out_len){ // TODO: правильное получение данных
         asio::error_code ec;
-        std::cout << "max buffer length " << out_len <<std::endl;
         uint16_t recv_bytes = 0;
 
         auto data = asio::buffer(*out, out_len);
-
         switch (current_type){
-        case ip_protocol::IP_TCP: {
-            if (tcp_socket.is_open()) {
-                std::cout << "read socket open" <<std::endl;
+            case ip_protocol::TCP: {
+                recv_bytes = tcp_socket.receive(data, no_flag, ec);
+                break;
             }
-            recv_bytes = tcp_socket.read_some(data, ec);
-            break;
-        }
-        case ip_protocol::IP_UDP:{
-            recv_bytes = udp_socket.receive(data, 0, ec);
-            break;
-        }
-        }
-        if (ec) {
-            error_message.assign(ec.message());
-            std::cout << "read socket " << error_message <<std::endl;
+            case ip_protocol::UDP:{
+                recv_bytes = udp_socket.receive(data, no_flag, ec);
+                break;
+            }
         }
 
         out_len = recv_bytes;
-
-        return error_message;
+        return ec;
     }
 
 };
 
 
 PIMPL_FORWARD_CONSTRUCTOR(socket_handler, (ip_protocol), (), support::exception)
-PIMPL_FORWARD_METHOD(socket_handler, void, open, (std::string)(uint16_t), (), support::exception);
-PIMPL_FORWARD_METHOD(socket_handler, void, close, (), (), support::exception);
-PIMPL_FORWARD_METHOD(socket_handler, std::string, write, (const char*)(const int&), (), support::exception);
-PIMPL_FORWARD_METHOD(socket_handler, std::string, read, (char**) (int&), (), support::exception);
+PIMPL_FORWARD_METHOD(socket_handler, std::error_code, open, (std::string)(uint16_t), (), support::exception);
+PIMPL_FORWARD_METHOD(socket_handler, std::error_code, close, (), (), support::exception);
+PIMPL_FORWARD_METHOD(socket_handler, std::error_code, write, (const char*)(const int&), (), support::exception);
+PIMPL_FORWARD_METHOD(socket_handler, std::error_code, read, (char**) (int&), (), support::exception);
 
 
 }
