@@ -1,5 +1,6 @@
 /*
  * Copyright 2015, akashche at redhat.com
+ * Copyright 2017, alex at staticlibs.net
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
