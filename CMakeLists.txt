@@ -45,6 +45,7 @@ endif ( )
 
 add_library ( ${PROJECT_NAME} SHARED
         ${CMAKE_CURRENT_LIST_DIR}/src/tcp_connect_checker.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/socket_handler.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/wilton_net.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/wiltoncall_net.cpp
         ${${PROJECT_NAME}_RESFILE}
