@@ -21,8 +21,8 @@
  * Created on October 18, 2016, 12:21 PM
  */
 
-#ifndef WILTON_MISC_TCP_CONNECT_CHECKER_HPP
-#define WILTON_MISC_TCP_CONNECT_CHECKER_HPP
+#ifndef WILTON_NET_TCP_OPERATIONS
+#define WILTON_NET_TCP_OPERATIONS
 
 #include <cstdint>
 #include <chrono>
@@ -35,7 +35,7 @@
 namespace wilton {
 namespace net {
 
-class tcp_connect_checker : public sl::pimpl::object {
+class tcp_operations : public sl::pimpl::object {
 protected:
     /**
      * implementation class
@@ -48,15 +48,18 @@ public:
      * 
      * @param pimpl impl object
      */
-    PIMPL_CONSTRUCTOR(tcp_connect_checker)
+    PIMPL_CONSTRUCTOR(tcp_operations)
 
-    static std::string wait_for_connection(std::chrono::milliseconds timeout, 
-            const std::string& ip_addr, uint16_t tcp_port);
+    static std::string wait_for_connection(const std::string& ip_addr, uint16_t tcp_port,
+            std::chrono::milliseconds timeout);
+
+    static std::string resolve_ip_address(const std::string& hostname,
+            std::chrono::milliseconds timeout);
 
 };
 
 } // namespace
 }
 
-#endif /* WILTON_MISC_TCP_CONNECT_CHECKER_HPP */
+#endif /* WILTON_NET_TCP_OPERATIONS */
 

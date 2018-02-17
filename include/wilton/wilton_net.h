@@ -1,5 +1,6 @@
 /*
  * Copyright 2017, alex at staticlibs.net
+ * Copyright 2018, myasnikov.mike at gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,8 +31,53 @@
 extern "C" {
 #endif
 
-struct wilton_socket_handler;
-typedef struct wilton_socket_handler wilton_socket_handler;
+// sockets
+
+struct wilton_Socket;
+typedef struct wilton_Socket wilton_Socket;
+
+char* wilton_net_Socket_open(
+        wilton_Socket** socket_out,
+        const char* ip_addr,
+        int ip_addr_len,
+        int tcp_port,
+        const char* protocol,
+        int protocol_len,
+        const char* role,
+        int role_len,
+        int timeout_millis);
+
+char* wilton_net_Socket_close(
+        wilton_Socket* socket);
+
+char* wilton_net_Socket_write(
+        wilton_Socket* socket,
+        const char* data,
+        int data_len,
+        int timeout_millis);
+
+char* wilton_net_Socket_read_some(
+        wilton_Socket* socket,
+        int timeout_millis,
+        char** data_out,
+        int* data_len_out);
+
+char* wilton_net_Socket_read(
+        wilton_Socket* socket,
+        int bytes_to_read,
+        int timeout_millis,
+        char** data_out,
+        int* data_len_out);
+
+
+// other operations
+
+char* wilton_net_resolve_ip_address(
+        const char* hostname,
+        int hostname_len,
+        int timeout_millis,
+        char** ip_addr_out,
+        int* ip_addr_len_out);
 
 char* wilton_net_wait_for_tcp_connection(
         const char* ip_addr,
@@ -39,30 +85,10 @@ char* wilton_net_wait_for_tcp_connection(
         int tcp_port,
         int timeout_millis);
 
-char* wilton_net_socket_open(
-        wilton_socket_handler** handler,
-        const char* ip_addr,
-        int ip_addr_len,
-        int tcp_port,
-        const char *type_str,
-        int type_str_len);
 
-char* wilton_net_socket_close(
-        wilton_socket_handler* handler);
-
-char* wilton_net_socket_write(
-        wilton_socket_handler* handler,
-        const char* data,
-        int data_len);
-
-char* wilton_net_socket_read(
-        wilton_socket_handler* handler,
-        char **out_data,
-        int& data_len);
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* WILTON_NET_H */
-

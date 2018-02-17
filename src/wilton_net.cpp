@@ -24,10 +24,10 @@
 #include "wilton/wilton_net.h"
 
 #include <cstdint>
+#include <array>
+#include <chrono>
 #include <string>
 #include <memory>
-
-#include "asio.hpp"
 
 #include "staticlib/config.hpp"
 #include "staticlib/support.hpp"
@@ -38,27 +38,206 @@
 #include "wilton/support/buffer.hpp"
 #include "wilton/support/handle_registry.hpp"
 
-#include "tcp_connect_checker.hpp"
-#include "socket_handler.h"
+#include "tcp_client_socket.hpp"
+#include "tcp_operations.hpp"
+#include "tcp_server_socket.hpp"
 
 namespace { // anonymous
 
 const std::string LOGGER = std::string("wilton.net");
 
+wilton::net::wilton_socket create_socket(const std::string& ip_addr, uint16_t tcp_port,
+        const std::string& protocol, const std::string& role, std::chrono::milliseconds timeout) {
+    if ("TCP" == protocol) {
+        if ("server" == role) {
+            return wilton::net::tcp_server_socket(ip_addr, tcp_port, timeout);
+        } else if("client" == role) {
+            return wilton::net::tcp_client_socket(ip_addr, tcp_port, timeout);
+        } else {
+            throw wilton::support::exception(TRACEMSG("Invalid 'role' parameter" +
+                    " specified: [" + role + "], must be one of: [server, client]"));
+        }
+//        } else if ("UDP" == protocol_str) {
+    } else {
+        throw wilton::support::exception(TRACEMSG("Invalid 'protocol' parameter" +
+                " specified: [" + protocol + "], must be one of: [TCP, UDP]"));
+    }
+}
+
 } // namespace
 
-struct wilton_socket_handler {
+struct wilton_Socket {
 private:
-    wilton::net::socket_handler socket;
+    wilton::net::wilton_socket socket;
 
 public:
-    wilton_socket_handler(wilton::net::socket_handler&& _socket) :
-    socket(std::move(_socket)) { }
+    wilton_Socket(wilton::net::wilton_socket&& socket) :
+    socket(std::move(socket)) { }
 
-    wilton::net::socket_handler& impl() {
+    wilton::net::wilton_socket& impl() {
         return socket;
     }
 };
+
+char* wilton_net_socket_open(wilton_Socket** socket_out,
+        const char* ip_addr, int ip_addr_len, int tcp_port,
+        const char* protocol, int protocol_len, const char* role, int role_len,
+        int timeout_millis) /* noexcept */ {
+    if (nullptr == socket_out) return wilton::support::alloc_copy(TRACEMSG("Null 'socket_out' parameter specified"));
+    if (nullptr == ip_addr) return wilton::support::alloc_copy(TRACEMSG("Null 'ip_addr' parameter specified"));
+    if (!sl::support::is_uint16_positive(ip_addr_len)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'ip_addr_len' parameter specified: [" + sl::support::to_string(ip_addr_len) + "]"));
+    if (!sl::support::is_uint16_positive(tcp_port)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'tcp_port' parameter specified: [" + sl::support::to_string(tcp_port) + "]"));
+    if (nullptr == protocol) return wilton::support::alloc_copy(TRACEMSG("Null 'protocol' parameter specified"));
+    if (!sl::support::is_uint16_positive(protocol_len)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'protocol_len' parameter specified: [" + sl::support::to_string(protocol_len) + "]"));
+    if (nullptr == role) return wilton::support::alloc_copy(TRACEMSG("Null 'role' parameter specified"));
+    if (!sl::support::is_uint16_positive(role_len)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'role_len' parameter specified: [" + sl::support::to_string(role_len) + "]"));
+    if (!sl::support::is_uint32_positive(timeout_millis)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'timeout_millis' parameter specified: [" + sl::support::to_string(timeout_millis) + "]"));
+    try {
+        auto ip_addr_str = std::string(ip_addr, static_cast<size_t>(ip_addr_len));
+        auto protocol_str = std::string(protocol, static_cast<size_t>(protocol_len));
+        auto role_str = std::string(role, static_cast<size_t>(role_len));
+        auto timeout = std::chrono::milliseconds(timeout_millis);
+        wilton::support::log_debug(LOGGER, "Opening socket, ip: [" + ip_addr_str + "]," +
+                " port: [" + sl::support::to_string(tcp_port) + "]," +
+                " protocol: [" + protocol_str + "], role: [" + role_str + "]," +
+                " timeout: [" + sl::support::to_string(timeout_millis) + "] ...");
+        auto socket = create_socket(ip_addr_str, static_cast<uint16_t>(tcp_port), protocol_str, role_str, timeout);
+        wilton_Socket* socket_ptr = new wilton_Socket(std::move(socket));
+        *socket_out = socket_ptr;
+        wilton::support::log_debug(LOGGER, "Socket created, handle: [" + wilton::support::strhandle(socket_ptr) + "]");
+        return nullptr;
+    } catch (const std::exception& e) {
+        return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
+    }
+}
+
+char* wilton_net_socket_close(wilton_Socket* socket) /* noexcept */ {
+    if (nullptr == socket) return wilton::support::alloc_copy(TRACEMSG("Null 'socket' parameter specified"));
+    try {
+        wilton::support::log_debug(LOGGER, "Closing socket, handle: [" + wilton::support::strhandle(socket) + "] ...");
+        delete socket;
+        wilton::support::log_debug(LOGGER, "Socket closed");
+        return nullptr;
+    } catch (const std::exception& e) {
+        return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
+    }
+}
+
+char* wilton_net_socket_write(wilton_Socket* socket, const char* data, int data_len,
+            int timeout_millis) /* noexcept */ {
+    if (nullptr == socket) return wilton::support::alloc_copy(TRACEMSG("Null 'socket' parameter specified"));
+    if (nullptr == data) return wilton::support::alloc_copy(TRACEMSG("Null 'data' parameter specified"));
+    if (!sl::support::is_uint32_positive(data_len)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'data_len' parameter specified: [" + sl::support::to_string(data_len) + "]"));
+    if (!sl::support::is_uint32_positive(timeout_millis)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'timeout_millis' parameter specified: [" + sl::support::to_string(timeout_millis) + "]"));
+    try {
+        wilton::support::log_debug(LOGGER, std::string("Writing data to socket,") +
+                " handle: [" + wilton::support::strhandle(socket) + "]," +
+                " data_len: [" + sl::support::to_string(data_len) +  "],"
+                " timeout: [" + sl::support::to_string(timeout_millis) + "] ...");
+        socket->impl().write({data, data_len}, std::chrono::milliseconds(timeout_millis));
+        wilton::support::log_debug(LOGGER, "Write operation complete");
+        return nullptr;
+    } catch (const std::exception& e) {
+        return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
+    }
+}
+
+char* wilton_net_socket_read_some(wilton_Socket* socket, int timeout_millis,
+        char** data_out, int* data_len_out) {
+    if (nullptr == socket) return wilton::support::alloc_copy(TRACEMSG("Null 'socket' parameter specified"));
+    if (!sl::support::is_uint32_positive(timeout_millis)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'timeout_millis' parameter specified: [" + sl::support::to_string(timeout_millis) + "]"));
+    if (nullptr == data_out) return wilton::support::alloc_copy(TRACEMSG("Null 'data_out' parameter specified"));
+    if (nullptr == data_len_out) return wilton::support::alloc_copy(TRACEMSG("Null 'data_len_out' parameter specified"));
+    try {
+        wilton::support::log_debug(LOGGER, std::string("Reading some data from socket,") +
+                " handle: [" + wilton::support::strhandle(socket) + "]," +
+                " timeout: [" + sl::support::to_string(timeout_millis) + "] ...");
+        auto span = socket->impl().read_some(std::chrono::milliseconds(timeout_millis));
+        wilton::support::log_debug(LOGGER, std::string("Read-some operation complete,") +
+                " bytes read: [" + sl::support::to_string(span.size()) + "]");
+        auto buf = wilton::support::make_span_buffer(span);
+        if (buf.has_value()) {
+            *data_out = buf.value().data();
+            *data_len_out = static_cast<int>(buf.value().size());
+        } else {
+            *data_out = nullptr;
+            *data_len_out = 0;
+        }
+        return nullptr;
+    } catch (const std::exception& e) {
+        return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
+    }
+}
+
+char* wilton_net_socket_read(wilton_Socket* socket, int bytes_to_read, int timeout_millis,
+        char** data_out, int* data_len_out) /* noexcept */ {
+    if (nullptr == socket) return wilton::support::alloc_copy(TRACEMSG("Null 'socket' parameter specified"));
+    if (!sl::support::is_uint32_positive(bytes_to_read)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'bytes_to_read' parameter specified: [" + sl::support::to_string(bytes_to_read) + "]"));
+    if (!sl::support::is_uint32_positive(timeout_millis)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'timeout_millis' parameter specified: [" + sl::support::to_string(timeout_millis) + "]"));
+    if (nullptr == data_out) return wilton::support::alloc_copy(TRACEMSG("Null 'data_out' parameter specified"));
+    if (nullptr == data_len_out) return wilton::support::alloc_copy(TRACEMSG("Null 'data_len_out' parameter specified"));
+    try {
+        wilton::support::log_debug(LOGGER, std::string("Reading data from socket,") +
+                " handle: [" + wilton::support::strhandle(socket) + "]," +
+                " bytes_to_read: [" + sl::support::to_string(bytes_to_read) + "]," +
+                " timeout: [" + sl::support::to_string(timeout_millis) + "] ...");
+        auto span = socket->impl().read(
+                static_cast<uint32_t>(bytes_to_read), std::chrono::milliseconds(timeout_millis));
+        wilton::support::log_debug(LOGGER, std::string("Read operation complete,") +
+                " bytes read: [" + sl::support::to_string(span.size()) + "]");
+        auto buf = wilton::support::make_span_buffer(span);
+        if (buf.has_value()) {
+            *data_out = buf.value().data();
+            *data_len_out = static_cast<int>(buf.value().size());
+        } else {
+            *data_out = nullptr;
+            *data_len_out = 0;
+        }
+        return nullptr;
+    } catch (const std::exception& e) {
+        return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
+    }
+}
+
+char* wilton_net_resolve_ip_address(const char* hostname, int hostname_len,
+        int timeout_millis, char** ip_addr_out, int* ip_addr_len_out) /* noexcept */ {
+    if (nullptr == hostname) return wilton::support::alloc_copy(TRACEMSG("Null 'hostname' parameter specified"));
+    if (!sl::support::is_uint16_positive(hostname_len)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'hostname_len' parameter specified: [" + sl::support::to_string(hostname_len) + "]"));
+    if (!sl::support::is_uint32_positive(timeout_millis)) return wilton::support::alloc_copy(TRACEMSG(
+            "Invalid 'timeout_millis' parameter specified: [" + sl::support::to_string(timeout_millis) + "]"));
+    if (nullptr == ip_addr_out) return wilton::support::alloc_copy(TRACEMSG("Null 'ip_addr_out' parameter specified"));
+    if (nullptr == ip_addr_len_out) return wilton::support::alloc_copy(TRACEMSG("Null 'ip_addr_len_out' parameter specified"));
+    try {
+        auto hostname_str = std::string(hostname, static_cast<size_t>(hostname_len));
+        wilton::support::log_debug(LOGGER, std::string("Resolving IP address,") +
+                " hostname: [" + hostname_str + "]," +
+                " timeout: [" + sl::support::to_string(timeout_millis) + "] ...");
+        auto ip_addr = wilton::net::tcp_operations::resolve_ip_address(
+                hostname_str, std::chrono::milliseconds(timeout_millis));
+        auto buf = wilton::support::make_string_buffer(ip_addr);
+        if (buf.has_value()) {
+            *ip_addr_out = buf.value().data();
+            *ip_addr_len_out = static_cast<int>(buf.value().size());
+        } else {
+            *ip_addr_out = nullptr;
+            *ip_addr_len_out = 0;
+        }
+        return nullptr;
+    } catch (const std::exception& e) {
+        return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
+    }
+}
 
 char* wilton_net_wait_for_tcp_connection(const char* ip_addr, int ip_addr_len, 
         int tcp_port, int timeout_millis) /* noexcept */ {
@@ -71,133 +250,16 @@ char* wilton_net_wait_for_tcp_connection(const char* ip_addr, int ip_addr_len,
             "Invalid 'timeout_millis' parameter specified: [" + sl::support::to_string(timeout_millis) + "]"));
     try {
         auto ip_addr_str = std::string(ip_addr, static_cast<uint32_t> (ip_addr_len));
-        uint16_t tcp_port_u16 = static_cast<uint16_t> (tcp_port);
-        uint32_t timeout_millis_u32 = static_cast<uint32_t> (timeout_millis);
-        std::chrono::milliseconds timeout{timeout_millis_u32};
         wilton::support::log_debug(LOGGER, "Awaiting TCP connection, IP: [" + ip_addr_str + "]," +
-                " port: [" + sl::support::to_string(tcp_port_u16) + "]," +
-                " timeout: [" + sl::support::to_string(timeout_millis_u32) + "]...");
-        std::string err = wilton::net::tcp_connect_checker::wait_for_connection(timeout, ip_addr_str, tcp_port_u16);
+                " port: [" + sl::support::to_string(tcp_port) + "]," +
+                " timeout: [" + sl::support::to_string(timeout_millis) + "]...");
+        std::string err = wilton::net::tcp_operations::wait_for_connection(
+                ip_addr_str, static_cast<uint16_t>(tcp_port), std::chrono::milliseconds(timeout_millis));
         wilton::support::log_debug(LOGGER, "TCP connection wait complete, result: [" + err + "]");
         if (err.empty()) {
             return nullptr;
         } else {
             return wilton::support::alloc_copy(err);
-        }
-    } catch (const std::exception& e) {
-        return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
-    }
-}
-
-char* wilton_net_socket_open(wilton_socket_handler** handler, const char* ip_addr,
-        int ip_addr_len, int tcp_port, const char* type_str, int type_str_len) {
-    // check params
-    if (nullptr == handler) return wilton::support::alloc_copy(TRACEMSG("Null 'handler' parameter specified"));
-    if (nullptr == ip_addr) return wilton::support::alloc_copy(TRACEMSG("Null 'ip_addr' parameter specified"));
-    if (!sl::support::is_uint32(ip_addr_len)) return wilton::support::alloc_copy(TRACEMSG(
-            "Invalid 'ip_addr_len' parameter specified: [" + sl::support::to_string(ip_addr_len) + "]"));
-    if (!sl::support::is_uint16_positive(tcp_port)) return wilton::support::alloc_copy(TRACEMSG(
-            "Invalid 'tcp_port' parameter specified: [" + sl::support::to_string(tcp_port) + "]"));
-    if (nullptr == type_str) return wilton::support::alloc_copy(TRACEMSG("Null 'type_str' parameter specified"));
-    if (!sl::support::is_uint32(type_str_len)) return wilton::support::alloc_copy(TRACEMSG(
-            "Invalid 'type_str_len' parameter specified: [" + sl::support::to_string(type_str_len) + "]"));
-
-    try {
-        // check UDP/TCP type
-        std::string type_literal(type_str, type_str_len);
-        wilton::net::ip_protocol type;
-        if (!type_literal.compare("TCP")) {
-            type = wilton::net::ip_protocol::TCP;
-        } else if (!type_literal.compare("UDP")) {
-            type = wilton::net::ip_protocol::UDP;
-        } else {
-            return wilton::support::alloc_copy(TRACEMSG("Invalid 'protocolType' parameter specified: [" +
-                    type_literal + "]. Should be TCP/UDP"));
-        }
-
-        std::string ip(ip_addr, ip_addr_len);
-
-        wilton::net::socket_handler socket(type);
-        wilton_socket_handler* socket_ptr = new wilton_socket_handler{std::move(socket)};
-
-        *handler = socket_ptr; // setup pointer to socket for next use
-        wilton::support::log_debug(LOGGER, "Awaiting " + type_literal + " connection, IP: [" + ip + "]," +
-                " port: [" + sl::support::to_string(tcp_port) + "] ...");
-
-        std::error_code err = socket_ptr->impl().open(ip, tcp_port);
-
-        wilton::support::log_debug(LOGGER, type_literal + " connection wait complete, result: [" + err.message() + "]");
-        if (!err) { // if error code is 0
-            return nullptr;
-        } else {
-            return wilton::support::alloc_copy(err.message());
-        }
-    } catch (const std::exception& e) {
-        return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
-    }
-}
-
-char* wilton_net_socket_close(wilton_socket_handler* handler) {
-    if (nullptr == handler) return wilton::support::alloc_copy(TRACEMSG("Null 'handler' parameter specified"));
-    try {
-        wilton::support::log_debug(LOGGER, "Closing connection, handle: [" + wilton::support::strhandle(handler) + "] ...");
-
-        std::error_code err = handler->impl().close();
-        delete handler;
-
-        wilton::support::log_debug(LOGGER, "Connection closed, result: [" + err.message() + "]");
-        if (!err) { // if error code is 0
-            return nullptr;
-        } else {
-            return wilton::support::alloc_copy(err.message());
-        }
-    } catch (const std::exception& e) {
-        return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
-    }
-}
-
-char* wilton_net_socket_write(wilton_socket_handler* handler, const char* data, int data_len){
-    if (nullptr == handler) return wilton::support::alloc_copy(TRACEMSG("Null 'handler' parameter specified"));
-    if (nullptr == data) return wilton::support::alloc_copy(TRACEMSG("Null 'data' parameter specified"));
-    if (!sl::support::is_uint32(data_len)) return wilton::support::alloc_copy(TRACEMSG(
-            "Invalid 'data_len' parameter specified: [" + sl::support::to_string(data_len) + "]"));
-    // try to send data
-    try {
-        wilton::support::log_debug(LOGGER, "Write data to socket, handle: [" + wilton::support::strhandle(handler) + "]" +
-                "\n[" + std::string(data, data_len) +  " ]");
-
-        std::error_code err = handler->impl().write(data, data_len);
-
-        wilton::support::log_debug(LOGGER, "Write operation complete, result: [" + err.message() + "]");
-        if (!err) { // if error code is 0
-            return nullptr;
-        } else {
-            return wilton::support::alloc_copy(err.message());
-        }
-    } catch (const std::exception& e) {
-        return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
-    }
-}
-
-char* wilton_net_socket_read(wilton_socket_handler* handler, char** out_data, int& data_len) {
-    if (nullptr == handler) return wilton::support::alloc_copy(TRACEMSG("Null 'handler' parameter specified"));
-    if (nullptr == out_data) return wilton::support::alloc_copy(TRACEMSG("Null 'out_data' parameter specified"));
-    if (!sl::support::is_uint32(data_len)) return wilton::support::alloc_copy(TRACEMSG(
-            "Invalid 'data_len' parameter specified: [" + sl::support::to_string(data_len) + "]"));
-
-    // try to read data
-    try {
-        wilton::support::log_debug(LOGGER, "Read data from socket, handle: [" +
-                wilton::support::strhandle(handler) + "] ...");
-
-        std::error_code err = handler->impl().read(out_data, data_len);
-
-        wilton::support::log_debug(LOGGER, "Write operation complete. Data: \n[" +
-                std::string(*out_data, data_len) + " ], result: [" + err.message() + "]");
-        if (!err) { // if error code is 0
-            return nullptr;
-        } else {
-            return wilton::support::alloc_copy(err.message());
         }
     } catch (const std::exception& e) {
         return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
