@@ -26,6 +26,7 @@ set ( ${PROJECT_NAME}_DEPS
         staticlib_config
         staticlib_support
         staticlib_io
+        staticlib_ranges
         staticlib_utils
         staticlib_json
         staticlib_pimpl

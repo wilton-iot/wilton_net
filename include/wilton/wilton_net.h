@@ -72,7 +72,7 @@ char* wilton_net_Socket_read(
 
 // other operations
 
-char* wilton_net_resolve_ip_address(
+char* wilton_net_resolve_hostname(
         const char* hostname,
         int hostname_len,
         int timeout_millis,

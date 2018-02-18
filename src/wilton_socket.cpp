@@ -37,7 +37,7 @@ sl::io::span<char> wilton_socket::impl::read(wilton_socket&, uint32_t bytes_to_r
 PIMPL_FORWARD_METHOD(wilton_socket, sl::io::span<char>, read, (uint32_t)(std::chrono::milliseconds), (), support::exception);
 // forward pure virtual methods
 PIMPL_FORWARD_METHOD(wilton_socket, void, write, (sl::io::span<const char>)(std::chrono::milliseconds), (), support::exception);
-PIMPL_FORWARD_METHOD(wilton_socket, sl::io::span<char>, read_some, (std::chrono::milliseconds), (), support::exception);
+PIMPL_FORWARD_METHOD(wilton_socket, sl::io::span<char>, read_some, (uint32_t)(std::chrono::milliseconds), (), support::exception);
 
 } // namespace
 }

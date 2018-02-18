@@ -35,7 +35,7 @@ class wilton_socket::impl : public sl::pimpl::object::impl {
 public:
     virtual void write(wilton_socket&, sl::io::span<const char> data, std::chrono::milliseconds timeout) = 0;
 
-    virtual sl::io::span<char> read_some(wilton_socket&, std::chrono::milliseconds timeout) = 0;
+    virtual sl::io::span<char> read_some(wilton_socket&, uint32_t max_bytes_to_read, std::chrono::milliseconds timeout) = 0;
 
     sl::io::span<char> read(wilton_socket&, uint32_t bytes_to_read, std::chrono::milliseconds timeout);
 };

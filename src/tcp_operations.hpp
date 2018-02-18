@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <chrono>
 #include <string>
+#include <vector>
 
 #include "staticlib/pimpl.hpp"
 
@@ -50,10 +51,10 @@ public:
      */
     PIMPL_CONSTRUCTOR(tcp_operations)
 
-    static std::string wait_for_connection(const std::string& ip_addr, uint16_t tcp_port,
+    static std::vector<std::string> resolve_hostname(const std::string& hostname,
             std::chrono::milliseconds timeout);
 
-    static std::string resolve_ip_address(const std::string& hostname,
+    static std::string wait_for_connection(const std::string& ip_addr, uint16_t tcp_port,
             std::chrono::milliseconds timeout);
 
 };

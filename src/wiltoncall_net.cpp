@@ -21,8 +21,6 @@
  * Created on October 17, 2017, 8:59 PM
  */
 
-#include <iostream>
-
 #include "wilton/wilton_net.h"
 
 #include "staticlib/config.hpp"
@@ -245,7 +243,7 @@ support::buffer socket_read(sl::io::span<const char> data) {
     return support::make_hex_buffer(src);
 }
 
-support::buffer resolve_ip_address(sl::io::span<const char> data) {
+support::buffer resolve_hostname(sl::io::span<const char> data) {
     // json parse
     auto json = sl::json::load(data);
     auto rhostname = std::ref(sl::utils::empty_string());
@@ -268,7 +266,7 @@ support::buffer resolve_ip_address(sl::io::span<const char> data) {
     // call wilton
     char* out = nullptr;
     int out_len = 0;
-    auto err = wilton_net_resolve_ip_address(hostname.c_str(), static_cast<int>(hostname.length()),
+    auto err = wilton_net_resolve_hostname(hostname.c_str(), static_cast<int>(hostname.length()),
             static_cast<int>(timeout), std::addressof(out), std::addressof(out_len));
     if (nullptr != err) support::throw_wilton_error(err, TRACEMSG(err));
     return support::wrap_wilton_buffer(out, out_len);
@@ -319,7 +317,7 @@ extern "C" char* wilton_module_init() {
         wilton::support::register_wiltoncall("net_socket_write", wilton::net::socket_write);
         wilton::support::register_wiltoncall("net_socket_read",  wilton::net::socket_read);
         wilton::support::register_wiltoncall("net_wait_for_tcp_connection", wilton::net::wait_for_tcp_connection);
-        wilton::support::register_wiltoncall("net_resolve_ip_address", wilton::net::resolve_ip_address);
+        wilton::support::register_wiltoncall("net_resolve_hostname", wilton::net::resolve_hostname);
 
         return nullptr;
     } catch (const std::exception& e) {

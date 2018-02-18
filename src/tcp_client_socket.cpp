@@ -45,7 +45,9 @@ public:
         // todo
     }
 
-    virtual sl::io::span<char> read_some(wilton_socket&, std::chrono::milliseconds timeout) override {
+    virtual sl::io::span<char> read_some(wilton_socket&, uint32_t max_bytes_to_read,
+            std::chrono::milliseconds timeout) override {
+        (void) max_bytes_to_read;
         (void) timeout;
         // todo
         return {nullptr, 0};

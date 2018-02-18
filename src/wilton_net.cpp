@@ -26,10 +26,12 @@
 #include <cstdint>
 #include <array>
 #include <chrono>
+#include <limits>
 #include <string>
 #include <memory>
 
 #include "staticlib/config.hpp"
+#include "staticlib/ranges.hpp"
 #include "staticlib/support.hpp"
 #include "staticlib/utils.hpp"
 
@@ -160,7 +162,8 @@ char* wilton_net_socket_read_some(wilton_Socket* socket, int timeout_millis,
         wilton::support::log_debug(LOGGER, std::string("Reading some data from socket,") +
                 " handle: [" + wilton::support::strhandle(socket) + "]," +
                 " timeout: [" + sl::support::to_string(timeout_millis) + "] ...");
-        auto span = socket->impl().read_some(std::chrono::milliseconds(timeout_millis));
+        auto span = socket->impl().read_some(std::numeric_limits<uint32_t>::max(),
+                std::chrono::milliseconds(timeout_millis));
         wilton::support::log_debug(LOGGER, std::string("Read-some operation complete,") +
                 " bytes read: [" + sl::support::to_string(span.size()) + "]");
         auto buf = wilton::support::make_span_buffer(span);
@@ -209,7 +212,7 @@ char* wilton_net_socket_read(wilton_Socket* socket, int bytes_to_read, int timeo
     }
 }
 
-char* wilton_net_resolve_ip_address(const char* hostname, int hostname_len,
+char* wilton_net_resolve_hostname(const char* hostname, int hostname_len,
         int timeout_millis, char** ip_addr_out, int* ip_addr_len_out) /* noexcept */ {
     if (nullptr == hostname) return wilton::support::alloc_copy(TRACEMSG("Null 'hostname' parameter specified"));
     if (!sl::support::is_uint16_positive(hostname_len)) return wilton::support::alloc_copy(TRACEMSG(
@@ -223,16 +226,18 @@ char* wilton_net_resolve_ip_address(const char* hostname, int hostname_len,
         wilton::support::log_debug(LOGGER, std::string("Resolving IP address,") +
                 " hostname: [" + hostname_str + "]," +
                 " timeout: [" + sl::support::to_string(timeout_millis) + "] ...");
-        auto ip_addr = wilton::net::tcp_operations::resolve_ip_address(
+        auto addr_list = wilton::net::tcp_operations::resolve_hostname(
                 hostname_str, std::chrono::milliseconds(timeout_millis));
-        auto buf = wilton::support::make_string_buffer(ip_addr);
-        if (buf.has_value()) {
-            *ip_addr_out = buf.value().data();
-            *ip_addr_len_out = static_cast<int>(buf.value().size());
-        } else {
-            *ip_addr_out = nullptr;
-            *ip_addr_len_out = 0;
+        if (addr_list.empty()) {
+            return wilton::support::alloc_copy(TRACEMSG(
+                    "Cannot resolve IP address, hostname: [" + hostname + "]"));
         }
+        auto ra = sl::ranges::transform(std::move(addr_list), [](std::string st) {
+            return sl::json::value(std::move(st));
+        });
+        auto buf = wilton::support::make_json_buffer(ra.to_vector());
+        *ip_addr_out = buf.value().data();
+        *ip_addr_len_out = static_cast<int>(buf.value().size());
         return nullptr;
     } catch (const std::exception& e) {
         return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));

@@ -52,7 +52,7 @@ public:
 
     void write(sl::io::span<const char> data, std::chrono::milliseconds timeout);
 
-    sl::io::span<char> read_some(std::chrono::milliseconds timeout);
+    sl::io::span<char> read_some(uint32_t max_bytes_to_read, std::chrono::milliseconds timeout);
 
     sl::io::span<char> read(uint32_t bytes_to_read, std::chrono::milliseconds timeout);
 
