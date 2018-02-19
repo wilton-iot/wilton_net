@@ -37,11 +37,14 @@ staticlib_pkg_check_modules ( ${PROJECT_NAME}_DEPS_PC REQUIRED ${PROJECT_NAME}_D
 set ( ${PROJECT_NAME}_PLATFORM_SRC ) 
 set ( ${PROJECT_NAME}_RESFILE )
 set ( ${PROJECT_NAME}_DEFFILE )
+set ( ${PROJECT_NAME}_DEFINITIONS )
 if ( STATICLIB_TOOLCHAIN MATCHES "windows_.+" )
     configure_file ( ${WILTON_DIR}/resources/buildres/wilton_module.rc
             ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.rc )
     set ( ${PROJECT_NAME}_RESFILE ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.rc )
     set ( ${PROJECT_NAME}_DEFFILE ${CMAKE_CURRENT_LIST_DIR}/resources/${PROJECT_NAME}.def )
+    # http://think-async.com/Asio/asio-1.10.6/doc/asio/reference/basic_stream_socket/cancel/overload1.html#asio.reference.basic_stream_socket.cancel.overload1.remarks
+    set ( ${PROJECT_NAME}_DEFINITIONS -DASIO_DISABLE_IOCP )
 endif ( )
 
 add_library ( ${PROJECT_NAME} SHARED
@@ -67,6 +70,8 @@ target_include_directories ( ${PROJECT_NAME} BEFORE PRIVATE
         ${${PROJECT_NAME}_DEPS_PC_INCLUDE_DIRS} )
         
 target_compile_options ( ${PROJECT_NAME} PRIVATE ${${PROJECT_NAME}_DEPS_PC_CFLAGS_OTHER} )
+
+target_compile_definitions( ${PROJECT_NAME} PRIVATE ${${PROJECT_NAME}_DEFINITIONS} )
 
 if ( STATICLIB_TOOLCHAIN MATCHES "android_.+" )
     set_property ( TARGET ${PROJECT_NAME} APPEND_STRING PROPERTY LINK_FLAGS "-Wl,-soname,lib${PROJECT_NAME}.so" )

@@ -23,21 +23,43 @@
 
 #include "wilton_socket_impl.hpp"
 
+#include <cstring>
+#include <vector>
+
 #include "staticlib/pimpl/forward_macros.hpp"
+#include "staticlib/utils.hpp"
 
 namespace wilton {
 namespace net {
 
-sl::io::span<char> wilton_socket::impl::read(wilton_socket&, uint32_t bytes_to_read, std::chrono::milliseconds timeout) {
-    (void) bytes_to_read;
-    (void) timeout;
-    // todo loop over read_some
-    return {nullptr, 0};
+void wilton_socket::impl::read(wilton_socket& facade, sl::io::span<char> buffer, std::chrono::milliseconds timeout) {
+    uint64_t start = sl::utils::current_time_millis_steady();
+    uint64_t finish = start + timeout.count();
+    uint64_t cur = start;
+    uint32_t read = 0;
+    for (;;) {
+        uint64_t passed = cur - start;
+        auto tm = std::chrono::milliseconds(timeout.count() - passed);
+        auto span = facade.read_some(buffer.size() - read, tm);
+        std::memcpy(buffer.data() + read, span.data(), span.size());
+        read += span.size();
+        if (read >= buffer.size()) {
+            break;
+        }
+        cur = sl::utils::current_time_millis_steady();
+        if (cur >= finish) {
+            break;
+        }
+    }
+    if (read < buffer.size()) throw support::exception(TRACEMSG(
+            "Short read read from socket, bytes requested: [" + sl::support::to_string(buffer.size()) + "],"
+            " bytes read: [" + sl::support::to_string(read) + "],"
+            " timeout millis: [" + sl::support::to_string(timeout.count()) + "]"));
 }
-PIMPL_FORWARD_METHOD(wilton_socket, sl::io::span<char>, read, (uint32_t)(std::chrono::milliseconds), (), support::exception);
+PIMPL_FORWARD_METHOD(wilton_socket, void, read, (sl::io::span<char>)(std::chrono::milliseconds), (), support::exception);
 // forward pure virtual methods
 PIMPL_FORWARD_METHOD(wilton_socket, void, write, (sl::io::span<const char>)(std::chrono::milliseconds), (), support::exception);
-PIMPL_FORWARD_METHOD(wilton_socket, sl::io::span<char>, read_some, (uint32_t)(std::chrono::milliseconds), (), support::exception);
+PIMPL_FORWARD_METHOD(wilton_socket, sl::io::span<const char>, read_some, (uint32_t)(std::chrono::milliseconds), (), support::exception);
 
 } // namespace
 }

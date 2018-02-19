@@ -40,6 +40,7 @@ namespace { // anonymous
 
 std::string perform_check(asio::io_service& service, asio::ip::tcp::endpoint& endpoint,
         std::chrono::milliseconds timeout) {
+
     // prepare service
     service.reset();
 
@@ -103,6 +104,7 @@ public:
     
     static std::vector<std::string> resolve_hostname(const std::string& hostname,
             std::chrono::milliseconds timeout) {
+
         // prepare state
         asio::io_service service{};
         asio::ip::tcp::resolver resolver{service};
@@ -145,7 +147,7 @@ public:
             error = "Operation timed out, timeout millis: [" + sl::support::to_string(timeout.count()) + "]";
         });
 
-        // perform connection, callbacks will be called only from current thread
+        // perform connection, callbacks will be called only from the current thread
         service.run();
 
         // check results
