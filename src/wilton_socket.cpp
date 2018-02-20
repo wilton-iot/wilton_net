@@ -41,10 +41,12 @@ void wilton_socket::impl::read(wilton_socket& facade, sl::io::span<char> buffer,
         uint64_t passed = cur - start;
         auto tm = std::chrono::milliseconds(timeout.count() - passed);
         auto span = facade.read_some(buffer.size() - read, tm);
-        std::memcpy(buffer.data() + read, span.data(), span.size());
-        read += span.size();
-        if (read >= buffer.size()) {
-            break;
+        if (span.size() > 0) {
+            std::memcpy(buffer.data() + read, span.data(), span.size());
+            read += span.size();
+            if (read >= buffer.size()) {
+                break;
+            }
         }
         cur = sl::utils::current_time_millis_steady();
         if (cur >= finish) {

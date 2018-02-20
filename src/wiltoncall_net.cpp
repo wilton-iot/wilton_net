@@ -233,8 +233,13 @@ support::buffer socket_read(sl::io::span<const char> data) {
     }
     reg->put(socket);
     if (nullptr != err) support::throw_wilton_error(err, TRACEMSG(err));
-    if (0 == out_len) throw support::exception(TRACEMSG(
+    if (0 == out_len)  {
+        if (-1 == bytes_to_read) {
+            return support::make_empty_buffer();
+        }
+        throw support::exception(TRACEMSG(
             "Invalid empty 'read' result"));
+    }
     if (!hex) {
         return support::wrap_wilton_buffer(out, out_len);
     }
