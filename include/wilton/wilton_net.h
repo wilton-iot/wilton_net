@@ -40,7 +40,7 @@ char* wilton_net_Socket_open(
         wilton_Socket** socket_out,
         const char* ip_addr,
         int ip_addr_len,
-        int tcp_port,
+        int port,
         const char* protocol,
         int protocol_len,
         const char* role,

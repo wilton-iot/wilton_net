@@ -15,25 +15,26 @@
  */
 
 /* 
- * File:   tcp_server_socket.cpp
+ * File:   udp_client_socket.cpp
  * Author: alex
  *
- * Created on February 17, 2018, 3:33 PM
+ * Created on February 21, 2018, 2:12 PM
  */
 
 #include "asio.hpp"
 
 #include "staticlib/pimpl/forward_macros.hpp"
+#include "staticlib/utils.hpp"
 
-#include "tcp_server_socket.hpp"
+#include "udp_client_socket.hpp"
 #include "wilton_socket_impl.hpp"
 
 namespace wilton {
 namespace net {
 
-class tcp_server_socket::impl : public wilton_socket::impl {
+class udp_client_socket::impl : public wilton_socket::impl {
 
-    asio::ip::tcp::socket socket;
+    asio::ip::udp::socket socket;
 
 public:
     impl(const std::string& ip_addr, uint16_t port, std::chrono::milliseconds timeout) :
@@ -41,24 +42,22 @@ public:
     socket(service) {
 
         // prepare state
-        asio::ip::tcp::endpoint endpoint{asio::ip::address_v4::from_string(ip_addr), port};
-        asio::ip::tcp::acceptor acceptor{service, endpoint};
-        acceptor.non_blocking(true);
         asio::steady_timer timer{service};
-        auto accept_canceled = false;
+        asio::ip::udp::endpoint endpoint{asio::ip::address_v4::from_string(ip_addr), port};
+        auto connect_canceled = false;
         auto timer_canceled = false;
         auto error = std::string();
 
         // start timer
         timer.expires_from_now(timeout);
 
-        // accept callback
-        acceptor.async_accept(socket, [&](const std::error_code& ec) {
-            if (accept_canceled) return;
+        // connect callback
+        socket.async_connect(endpoint, [&](const std::error_code& ec) {
+            if (connect_canceled) return;
             timer_canceled = true;
             timer.cancel();
             if(ec) {
-                error = "Accept error, IP: [" + ip_addr + "]," +
+                error = "Connect error, IP: [" + ip_addr + "]," +
                         " port: [" + sl::support::to_string(port) + "]," +
                         " message: [" + ec.message() + "]," +
                         " code: [" + sl::support::to_string(ec.value()) + "]";
@@ -69,8 +68,8 @@ public:
         // timeout callback
         timer.async_wait([&](const std::error_code&) {
             if (timer_canceled) return;
-            accept_canceled = true;
-            acceptor.cancel();
+            connect_canceled = true;
+            socket.cancel();
             error = "Operation timed out, timeout millis: [" + sl::support::to_string(timeout.count()) + "]";
         });
 
@@ -83,22 +82,24 @@ public:
         // set socket mode
         socket.non_blocking(true);
     }
-    
+
     ~impl() STATICLIB_NOEXCEPT { };
 
     void async_write_some(sl::io::span<const char> data,
             std::function<void(const std::error_code&, size_t)> writer) override {
-        socket.async_write_some(asio::buffer(data.data(), data.size()), writer);
+        socket.async_send(asio::buffer(data.data(), data.size()), writer);
     }
 
-    virtual void async_read_some(std::function<void(const std::error_code&)> cb) override {
-        socket.async_read_some(asio::null_buffers(), [cb](const std::error_code& ec, std::size_t) {
-            cb(ec);
-        });
+    virtual void async_read_some(std::function<void(const std::error_code&)>) override {
+        throw support::exception(TRACEMSG(
+                "Read operation is not supported by UDP client socket," +
+                " please use UDP server socket instead"));
     }
 
-    virtual size_t sync_read_some(sl::io::span<char> buffer) override {
-        return socket.read_some(asio::buffer(buffer.data(), buffer.size()));
+    virtual size_t sync_read_some(sl::io::span<char>) override {
+        throw support::exception(TRACEMSG(
+                "Read operation is not supported by UDP client socket," +
+                " please use UDP server socket instead"));
     }
 
     virtual void cancel() override {
@@ -110,7 +111,7 @@ public:
     }
 
 };
-PIMPL_FORWARD_CONSTRUCTOR(tcp_server_socket, (const std::string&)(uint16_t)(std::chrono::milliseconds),
+PIMPL_FORWARD_CONSTRUCTOR(udp_client_socket, (const std::string&)(uint16_t)(std::chrono::milliseconds),
         (), support::exception)
 
 } // namespace

@@ -286,7 +286,7 @@ support::buffer wait_for_tcp_connection(sl::io::span<const char> data) {
         auto& name = fi.name();
         if ("ipAddress" == name) {
             rip = fi.as_string_nonempty_or_throw(name);
-        } else if ("tcpPort" == name) {
+        } else if ("tcpPort" == name || "udpPort" == name) {
             port = fi.as_int64_or_throw(name);
         } else if ("timeoutMillis" == name) {
             timeout = fi.as_int64_or_throw(name);
@@ -297,7 +297,7 @@ support::buffer wait_for_tcp_connection(sl::io::span<const char> data) {
     if (rip.get().empty()) throw support::exception(TRACEMSG(
             "Required parameter 'ipAddress' not specified"));
     if (-1 == port) throw support::exception(TRACEMSG(
-            "Required parameter 'tcpPort' not specified"));
+            "Required parameter 'tcpPort' (or 'udpPort') not specified"));
     if (-1 == timeout) throw support::exception(TRACEMSG(
             "Required parameter 'timeoutMillis' not specified"));
     const std::string& ip = rip.get();

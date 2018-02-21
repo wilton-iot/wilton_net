@@ -32,6 +32,123 @@
 namespace wilton {
 namespace net {
 
+void wilton_socket::impl::write(wilton_socket&, sl::io::span<const char> data, std::chrono::milliseconds timeout) {
+
+    // prepare state
+    service.reset();
+    asio::steady_timer timer{service};
+    auto write_canceled = false;
+    auto timer_canceled = false;
+    size_t written_total;
+    auto error = std::string();
+
+    // start timer
+    timer.expires_from_now(timeout);
+
+    // write callback
+    std::function<void(const std::error_code&, size_t)> writer;
+    writer = [&](const std::error_code& ec, size_t bytes_written) {
+        if (write_canceled) return;
+        if(ec) {
+            error = "Write error, bytes total to write: [" + sl::support::to_string(data.size() + written_total) + "]" +
+                    " bytes written: [" + sl::support::to_string(written_total) + "]," +
+                    " message: [" + ec.message() + "]," +
+                    " code: [" + sl::support::to_string(ec.value()) + "]";
+            timer_canceled = true;
+            timer.cancel();
+            return;
+        }
+        auto to_write = data.size() - bytes_written;
+        if (0 == to_write) {
+            timer_canceled = true;
+            timer.cancel();
+            return;
+        }
+        auto data_pass = sl::io::make_span(data.data() + bytes_written, to_write);
+        this->async_write_some(data_pass, writer);
+    };
+    this->async_write_some(data, writer);
+
+    // timeout callback
+    timer.async_wait([&](const std::error_code&) {
+        if (timer_canceled) return;
+        write_canceled = true;
+        this->cancel();
+        error = "Operation timed out, timeout millis: [" + sl::support::to_string(timeout.count()) + "]";
+    });
+
+    // perform connection, callbacks will be called only from the current thread
+    service.run();
+
+    // check results
+    if (!error.empty()) throw support::exception(TRACEMSG(error));
+}
+
+sl::io::span<const char> wilton_socket::impl::read_some(wilton_socket&, uint32_t max_bytes_to_read,
+        std::chrono::milliseconds timeout) {
+
+    // prepare state
+    read_buffer.resize(0);
+    service.reset();
+    asio::steady_timer timer{service};
+    auto read_canceled = false;
+    auto timer_canceled = false;
+    auto error = std::string();
+
+    // start timer
+    timer.expires_from_now(timeout);
+
+    // read callback, see: http://think-async.com/Asio/asio-1.10.6/doc/asio/overview/core/reactor.html
+    this->async_read_some([&](const std::error_code& ec) {
+        if (read_canceled) return;
+        timer_canceled = true;
+        timer.cancel();
+        if(ec) {
+            error = "Read error, IP: [" + ip_address + "]," +
+                    " port: [" + sl::support::to_string(protocol_port) + "]," +
+                    " message: [" + ec.message() + "]," +
+                    " code: [" + sl::support::to_string(ec.value()) + "]";
+            return;
+        }
+        auto avail = this->available();
+        if (avail > 0) {
+            auto to_read = avail < max_bytes_to_read ? avail : max_bytes_to_read;
+            read_buffer.resize(to_read);
+            auto dest = sl::io::make_span(read_buffer.data(), read_buffer.size());
+            auto read = this->sync_read_some(dest);
+            if (0 == read) throw support::exception(TRACEMSG(
+                    "Invalid empty read, IP: [" + ip_address + "]," +
+                    " port: [" + sl::support::to_string(protocol_port) + "]," +
+                    " max bytes to read: [" + sl::support::to_string(max_bytes_to_read) + "]," +
+                    " bytes available: [" + sl::support::to_string(avail) + "]"));
+            if (read < to_read) {
+                read_buffer.resize(read);
+            }
+        }
+    });
+
+    // timeout callback
+    timer.async_wait([&](const std::error_code&) {
+        if (timer_canceled) return;
+        read_canceled = true;
+        this->cancel();
+        // empty response is returned on timeout
+    });
+
+    // perform connection, callbacks will be called only from the current thread
+    service.run();
+
+    // check results
+    if (!error.empty()) throw support::exception(TRACEMSG(error));
+
+    // return view to internal buffer
+    if (read_buffer.size() > 0 ) {
+        return sl::io::make_span(const_cast<const char*>(read_buffer.data()), read_buffer.size());
+    } else {
+        return sl::io::span<const char>(nullptr, 0);
+    }
+}
+
 void wilton_socket::impl::read(wilton_socket& facade, sl::io::span<char> buffer, std::chrono::milliseconds timeout) {
     uint64_t start = sl::utils::current_time_millis_steady();
     uint64_t finish = start + timeout.count();
@@ -54,7 +171,7 @@ void wilton_socket::impl::read(wilton_socket& facade, sl::io::span<char> buffer,
         }
     }
     if (read < buffer.size()) throw support::exception(TRACEMSG(
-            "Short read read from socket, bytes requested: [" + sl::support::to_string(buffer.size()) + "],"
+            "Short read from socket, bytes requested: [" + sl::support::to_string(buffer.size()) + "],"
             " bytes read: [" + sl::support::to_string(read) + "],"
             " timeout millis: [" + sl::support::to_string(timeout.count()) + "]"));
 }

@@ -51,6 +51,8 @@ add_library ( ${PROJECT_NAME} SHARED
         ${CMAKE_CURRENT_LIST_DIR}/src/tcp_client_socket.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/tcp_operations.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/tcp_server_socket.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/udp_client_socket.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/udp_server_socket.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/wilton_net.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/wilton_socket.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/wiltoncall_net.cpp
