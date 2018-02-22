@@ -145,7 +145,7 @@ sl::io::span<const char> wilton_socket::impl::read_some(wilton_socket&, uint32_t
     if (read_buffer.size() > 0 ) {
         return sl::io::make_span(const_cast<const char*>(read_buffer.data()), read_buffer.size());
     } else {
-        return sl::io::span<const char>(nullptr, 0);
+        return sl::io::span<const char>(sl::utils::empty_string().c_str(), 0);
     }
 }
 

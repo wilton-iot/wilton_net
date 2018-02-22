@@ -133,7 +133,7 @@ support::buffer socket_close(sl::io::span<const char> data) {
         reg->put(socket);
         support::throw_wilton_error(err, TRACEMSG(err));
     }
-    return support::make_empty_buffer();
+    return support::make_null_buffer();
 }
 
 support::buffer socket_write(sl::io::span<const char> data) {
@@ -186,7 +186,7 @@ support::buffer socket_write(sl::io::span<const char> data) {
     }
     reg->put(socket);
     if (nullptr != err) support::throw_wilton_error(err, TRACEMSG(err));
-    return support::make_empty_buffer();
+    return support::make_null_buffer();
 }
 
 support::buffer socket_read(sl::io::span<const char> data) {
@@ -235,7 +235,7 @@ support::buffer socket_read(sl::io::span<const char> data) {
     if (nullptr != err) support::throw_wilton_error(err, TRACEMSG(err));
     if (0 == out_len)  {
         if (-1 == bytes_to_read) {
-            return support::make_empty_buffer();
+            return support::make_null_buffer();
         }
         throw support::exception(TRACEMSG(
             "Invalid empty 'read' result"));
@@ -307,7 +307,7 @@ support::buffer wait_for_tcp_connection(sl::io::span<const char> data) {
     if (nullptr != err) {
         support::throw_wilton_error(err, TRACEMSG(err));
     }
-    return support::make_empty_buffer();
+    return support::make_null_buffer();
 }
 
 

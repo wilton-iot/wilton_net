@@ -35,7 +35,7 @@
 #include "staticlib/support.hpp"
 #include "staticlib/utils.hpp"
 
-#include "wilton/support/alloc_copy.hpp"
+#include "wilton/support/alloc.hpp"
 #include "wilton/support/logging.hpp"
 #include "wilton/support/buffer.hpp"
 #include "wilton/support/handle_registry.hpp"
@@ -177,13 +177,8 @@ char* wilton_net_Socket_read_some(wilton_Socket* socket, int timeout_millis,
         wilton::support::log_debug(LOGGER, std::string("Read-some operation complete,") +
                 " bytes read: [" + sl::support::to_string(span.size()) + "]");
         auto buf = wilton::support::make_const_span_buffer(span);
-        if (buf.has_value()) {
-            *data_out = buf.value().data();
-            *data_len_out = static_cast<int>(buf.value().size());
-        } else {
-            *data_out = nullptr;
-            *data_len_out = 0;
-        }
+        *data_out = buf.data();
+        *data_len_out = buf.size_int();
         return nullptr;
     } catch (const std::exception& e) {
         return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
@@ -204,13 +199,19 @@ char* wilton_net_Socket_read(wilton_Socket* socket, int bytes_to_read, int timeo
                 " handle: [" + wilton::support::strhandle(socket) + "]," +
                 " bytes_to_read: [" + sl::support::to_string(bytes_to_read) + "]," +
                 " timeout: [" + sl::support::to_string(timeout_millis) + "] ...");
-        auto buf = wilton::support::make_buffer(static_cast<uint32_t>(bytes_to_read)).value();
-        // todo: free me
+        auto buf = wilton::support::alloc_span(static_cast<uint32_t>(bytes_to_read));
+        auto defer_killswitch = false;
+        auto deferred = sl::support::defer([&buf, &defer_killswitch]() STATICLIB_NOEXCEPT {
+            if (!defer_killswitch) {
+                wilton_free(buf.data());
+            }
+        });
         socket->impl().read(buf, std::chrono::milliseconds(timeout_millis));
         wilton::support::log_debug(LOGGER, std::string("Read operation complete,") +
                 " bytes read: [" + sl::support::to_string(buf.size()) + "]");
         *data_out = buf.data();
-        *data_len_out = static_cast<int>(buf.size());
+        *data_len_out = buf.size_int();
+        defer_killswitch = true;
         return nullptr;
     } catch (const std::exception& e) {
         return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
@@ -241,8 +242,8 @@ char* wilton_net_resolve_hostname(const char* hostname, int hostname_len,
             return sl::json::value(std::move(st));
         });
         auto buf = wilton::support::make_json_buffer(ra.to_vector());
-        *ip_addr_out = buf.value().data();
-        *ip_addr_len_out = static_cast<int>(buf.value().size());
+        *ip_addr_out = buf.data();
+        *ip_addr_len_out = buf.size_int();
         return nullptr;
     } catch (const std::exception& e) {
         return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
