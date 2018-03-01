@@ -13,13 +13,13 @@
 ; limitations under the License.
 
 EXPORTS
-    wilton_net_socket_open
-    wilton_net_socket_close
-    wilton_net_socket_write
-    wilton_net_socket_read_some
-    wilton_net_socket_read
+    wilton_net_Socket_open
+    wilton_net_Socket_close
+    wilton_net_Socket_write
+    wilton_net_Socket_read_some
+    wilton_net_Socket_read
 
-    wilton_net_resolve_ip_address
+    wilton_net_resolve_hostname
     wilton_net_wait_for_tcp_connection
 
     wilton_module_init
