@@ -153,11 +153,11 @@ void wilton_socket::impl::read(wilton_socket& facade, sl::io::span<char> buffer,
     uint64_t start = sl::utils::current_time_millis_steady();
     uint64_t finish = start + timeout.count();
     uint64_t cur = start;
-    uint32_t read = 0;
+    size_t read = 0;
     for (;;) {
         uint64_t passed = cur - start;
         auto tm = std::chrono::milliseconds(timeout.count() - passed);
-        auto span = facade.read_some(buffer.size() - read, tm);
+        auto span = facade.read_some(static_cast<uint32_t>(buffer.size() - read), tm);
         if (span.size() > 0) {
             std::memcpy(buffer.data() + read, span.data(), span.size());
             read += span.size();
