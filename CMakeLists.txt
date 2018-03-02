@@ -44,7 +44,11 @@ if ( STATICLIB_TOOLCHAIN MATCHES "windows_.+" )
     set ( ${PROJECT_NAME}_RESFILE ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.rc )
     set ( ${PROJECT_NAME}_DEFFILE ${CMAKE_CURRENT_LIST_DIR}/resources/${PROJECT_NAME}.def )
     # http://think-async.com/Asio/asio-1.10.6/doc/asio/reference/basic_stream_socket/cancel/overload1.html#asio.reference.basic_stream_socket.cancel.overload1.remarks
-    set ( ${PROJECT_NAME}_DEFINITIONS -DASIO_DISABLE_IOCP )
+    if ( STATICLIB_TOOLCHAIN MATCHES "windows_i386_.+" )
+        set ( ${PROJECT_NAME}_DEFINITIONS 
+                -DASIO_DISABLE_IOCP
+                -DASIO_ENABLE_CANCELIO )
+    endif ( )    
 endif ( )
 
 add_library ( ${PROJECT_NAME} SHARED
