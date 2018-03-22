@@ -41,6 +41,7 @@ namespace net {
 
 namespace { //anonymous
 
+// initialized from wilton_module_init
 std::shared_ptr<support::handle_registry<wilton_Socket>> shared_socket_registry() {
     static auto registry = std::make_shared<support::handle_registry<wilton_Socket>>(
         [] (wilton_Socket* socket) STATICLIB_NOEXCEPT {
@@ -316,6 +317,7 @@ support::buffer wait_for_tcp_connection(sl::io::span<const char> data) {
 
 extern "C" char* wilton_module_init() {
     try {
+        wilton::net::shared_socket_registry();
         wilton::support::register_wiltoncall("net_socket_open",  wilton::net::socket_open);
         wilton::support::register_wiltoncall("net_socket_close", wilton::net::socket_close);
         wilton::support::register_wiltoncall("net_socket_write", wilton::net::socket_write);
