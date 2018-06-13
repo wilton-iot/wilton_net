@@ -176,7 +176,10 @@ support::buffer socket_write(sl::io::span<const char> data) {
     if (hex) {
         auto src = sl::io::array_source(payload.data(), payload.size());
         auto sink = sl::io::string_sink();
-        sl::io::copy_from_hex(src, sink);
+        {
+            auto unhexer = sl::io::make_hex_source(src);
+            sl::io::copy_all(unhexer, sink);
+        }
         err = wilton_net_Socket_write(socket, sink.get_string().c_str(),
                 static_cast<int>(sink.get_string().length()),
                 static_cast<int>(timeout));
