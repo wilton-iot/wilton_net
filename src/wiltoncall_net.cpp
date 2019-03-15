@@ -43,8 +43,10 @@ namespace { //anonymous
 
 // initialized from wilton_module_init
 std::shared_ptr<support::unique_handle_registry<wilton_Socket>> socket_registry() {
-    static auto registry = std::make_shared<
-        support::unique_handle_registry<wilton_Socket>>(wilton_net_Socket_close);
+    static auto registry = std::make_shared<support::unique_handle_registry<wilton_Socket>>(
+            [](wilton_Socket* sock) STATICLIB_NOEXCEPT {
+                wilton_net_Socket_close(sock);
+            });
     return registry;
 }
 
