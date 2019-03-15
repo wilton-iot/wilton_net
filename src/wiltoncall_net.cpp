@@ -30,10 +30,10 @@
 #include "staticlib/support.hpp"
 #include "staticlib/utils.hpp"
 
-#include "wilton/support/handle_registry.hpp"
 #include "wilton/support/buffer.hpp"
 #include "wilton/support/exception.hpp"
 #include "wilton/support/registrar.hpp"
+#include "wilton/support/unique_handle_registry.hpp"
 
 
 namespace wilton {
@@ -42,11 +42,9 @@ namespace net {
 namespace { //anonymous
 
 // initialized from wilton_module_init
-std::shared_ptr<support::handle_registry<wilton_Socket>> shared_socket_registry() {
-    static auto registry = std::make_shared<support::handle_registry<wilton_Socket>>(
-        [] (wilton_Socket* socket) STATICLIB_NOEXCEPT {
-            wilton_net_Socket_close(socket);
-        });
+std::shared_ptr<support::unique_handle_registry<wilton_Socket>> socket_registry() {
+    static auto registry = std::make_shared<
+        support::unique_handle_registry<wilton_Socket>>(wilton_net_Socket_close);
     return registry;
 }
 
@@ -101,7 +99,7 @@ support::buffer socket_open(sl::io::span<const char> data) {
     if (nullptr != err) {
         support::throw_wilton_error(err, TRACEMSG(err));
     }
-    auto reg = shared_socket_registry();
+    auto reg = socket_registry();
     int64_t handle = reg->put(socket);
     return support::make_json_buffer({
         { "socketHandle", handle}
@@ -125,7 +123,7 @@ support::buffer socket_close(sl::io::span<const char> data) {
     if (-1 == handle) throw support::exception(TRACEMSG(
             "Required parameter 'socketHandle' not specified"));
     // get handle
-    auto reg = shared_socket_registry();
+    auto reg = socket_registry();
     wilton_Socket* socket = reg->remove(handle);
     if (nullptr == socket) throw support::exception(TRACEMSG(
             "Invalid 'socketHandle' parameter specified"));
@@ -167,7 +165,7 @@ support::buffer socket_write(sl::io::span<const char> data) {
             "Required parameter 'timeoutMillis' not specified"));
     const std::string& payload = rpayload.get();
     // get handle
-    auto reg = shared_socket_registry();
+    auto reg = socket_registry();
     wilton_Socket* socket = reg->remove(handle);
     if (nullptr == socket) throw support::exception(TRACEMSG(
             "Invalid 'socketHandle' parameter specified"));
@@ -220,7 +218,7 @@ support::buffer socket_read(sl::io::span<const char> data) {
     if (-1 == timeout) throw support::exception(TRACEMSG(
             "Required parameter 'timeoutMillis' not specified"));
     // get handle
-    auto reg = shared_socket_registry();
+    auto reg = socket_registry();
     wilton_Socket* socket = reg->remove(handle);
     if (nullptr == socket) throw support::exception(TRACEMSG(
             "Invalid 'socketHandle' parameter specified"));
@@ -320,7 +318,7 @@ support::buffer wait_for_tcp_connection(sl::io::span<const char> data) {
 
 extern "C" char* wilton_module_init() {
     try {
-        wilton::net::shared_socket_registry();
+        wilton::net::socket_registry();
         wilton::support::register_wiltoncall("net_socket_open",  wilton::net::socket_open);
         wilton::support::register_wiltoncall("net_socket_close", wilton::net::socket_close);
         wilton::support::register_wiltoncall("net_socket_write", wilton::net::socket_write);
