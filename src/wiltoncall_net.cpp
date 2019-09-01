@@ -59,7 +59,7 @@ support::buffer socket_open(sl::io::span<const char> data) {
     int64_t port = -1;
     auto rprotocol = std::ref(sl::utils::empty_string()); // ref to protocol string
     auto rrole = std::ref(sl::utils::empty_string()); // ref to protocol string
-    int64_t timeout = -1;
+    int64_t timeout = -1; // required
     for (const sl::json::field& fi : json.as_object()) {
         auto& name = fi.name();
         if ("ipAddress" == name) {
@@ -142,7 +142,7 @@ support::buffer socket_write(sl::io::span<const char> data) {
     auto json = sl::json::load(data);
     int64_t handle = -1;
     auto rpayload = std::ref(sl::utils::empty_string());
-    int64_t timeout = -1;
+    int64_t timeout = 0; // optional
     auto hex = false;
     for (const sl::json::field& fi : json.as_object()) {
         auto& name = fi.name();
@@ -163,8 +163,6 @@ support::buffer socket_write(sl::io::span<const char> data) {
             "Required parameter 'socketHandle' not specified"));
     if (rpayload.get().empty()) throw support::exception(TRACEMSG(
             "Required parameter 'data' not specified"));
-    if (-1 == timeout) throw support::exception(TRACEMSG(
-            "Required parameter 'timeoutMillis' not specified"));
     const std::string& payload = rpayload.get();
     // get handle
     auto reg = socket_registry();
@@ -172,6 +170,7 @@ support::buffer socket_write(sl::io::span<const char> data) {
     if (nullptr == socket) throw support::exception(TRACEMSG(
             "Invalid 'socketHandle' parameter specified"));
     // convert hex and call wilton
+    int written_out = 0;
     char* err = nullptr;
     if (hex) {
         auto src = sl::io::array_source(payload.data(), payload.size());
@@ -182,24 +181,25 @@ support::buffer socket_write(sl::io::span<const char> data) {
         }
         err = wilton_net_Socket_write(socket, sink.get_string().c_str(),
                 static_cast<int>(sink.get_string().length()),
-                static_cast<int>(timeout));
+                static_cast<int>(timeout), std::addressof(written_out));
     } else {
         err = wilton_net_Socket_write(socket, payload.c_str(),
                 static_cast<int>(payload.length()),
-                static_cast<int>(timeout));
+                static_cast<int>(timeout), std::addressof(written_out));
     }
     reg->put(socket);
     if (nullptr != err) support::throw_wilton_error(err, TRACEMSG(err));
-    return support::make_null_buffer();
+    return support::make_json_buffer({
+        { "bytesWritten", written_out }
+    });
 }
 
 support::buffer socket_read(sl::io::span<const char> data) {
     // json parse
     auto json = sl::json::load(data);
     int64_t handle = -1;
-    int64_t bytes_to_read = -1;
-    int64_t timeout = -1;
-    auto hex = false;
+    int64_t bytes_to_read = -1; // optional
+    int64_t timeout = 0; // optional
     for (const sl::json::field& fi : json.as_object()) {
         auto& name = fi.name();
         if ("socketHandle" == name) {
@@ -208,17 +208,12 @@ support::buffer socket_read(sl::io::span<const char> data) {
             bytes_to_read = fi.as_int64_or_throw(name);
         } else if ("timeoutMillis" == name) {
             timeout = fi.as_int64_or_throw(name);
-        } else if ("hex" == name) {
-            hex = fi.as_bool_or_throw(name);
         } else {
             throw support::exception(TRACEMSG("Unknown data field: [" + name + "]"));
         }
     }
-    // check json data, 'bytesToRead' and 'hex' are optional
     if (-1 == handle) throw support::exception(TRACEMSG(
             "Required parameter 'socketHandle' not specified"));
-    if (-1 == timeout) throw support::exception(TRACEMSG(
-            "Required parameter 'timeoutMillis' not specified"));
     // get handle
     auto reg = socket_registry();
     wilton_Socket* socket = reg->remove(handle);
@@ -237,16 +232,13 @@ support::buffer socket_read(sl::io::span<const char> data) {
     }
     reg->put(socket);
     if (nullptr != err) support::throw_wilton_error(err, TRACEMSG(err));
-    if (0 == out_len)  {
-        if (-1 == bytes_to_read) {
-            return support::make_null_buffer();
-        }
-        throw support::exception(TRACEMSG(
-            "Invalid empty 'read' result"));
+    if (nullptr == out) { // cannot happen
+        return support::make_null_buffer();
     }
-    if (!hex) {
-        return support::wrap_wilton_buffer(out, out_len);
-    }
+    auto deferred = sl::support::defer([out]() STATICLIB_NOEXCEPT {
+        wilton_free(out);
+    });
+    // return hex
     auto src = sl::io::array_source(out, out_len);
     return support::make_hex_buffer(src);
 }
@@ -255,7 +247,7 @@ support::buffer resolve_hostname(sl::io::span<const char> data) {
     // json parse
     auto json = sl::json::load(data);
     auto rhostname = std::ref(sl::utils::empty_string());
-    int64_t timeout = -1;
+    int64_t timeout = -1; // required
     for (const sl::json::field& fi : json.as_object()) {
         auto& name = fi.name();
         if ("hostname" == name) {
@@ -285,7 +277,7 @@ support::buffer wait_for_tcp_connection(sl::io::span<const char> data) {
     auto json = sl::json::load(data);
     auto rip = std::ref(sl::utils::empty_string());
     int64_t port = -1;
-    int64_t timeout = -1;
+    int64_t timeout = -1; // required
     for (const sl::json::field& fi : json.as_object()) {
         auto& name = fi.name();
         if ("ipAddress" == name) {

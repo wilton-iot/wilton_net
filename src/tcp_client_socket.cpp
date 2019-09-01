@@ -38,7 +38,7 @@ class tcp_client_socket::impl : public wilton_socket::impl {
 
 public:
     impl(const std::string& ip_addr, uint16_t port, std::chrono::milliseconds timeout) :
-    wilton_socket::impl(ip_addr, port),
+    wilton_socket::impl(ip_addr, port, timeout),
     socket(service) {
 
         // prepare state

@@ -36,8 +36,8 @@ class udp_server_socket::impl : public wilton_socket::impl {
     asio::ip::udp::socket socket;
 
 public:
-    impl(const std::string& ip_addr, uint16_t port, std::chrono::milliseconds) :
-    wilton_socket::impl(ip_addr, port),
+    impl(const std::string& ip_addr, uint16_t port, std::chrono::milliseconds timeout) :
+    wilton_socket::impl(ip_addr, port, timeout),
     socket(service) {
 
         // prepare state

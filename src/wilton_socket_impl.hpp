@@ -38,14 +38,16 @@ class wilton_socket::impl : public sl::pimpl::object::impl {
 protected:
     const std::string ip_address;
     const uint16_t protocol_port;
+    const std::chrono::milliseconds default_timeout;
 
     asio::io_service service;
     std::vector<char> read_buffer;
 
 public:
-    impl(const std::string& ip_addr, uint16_t port) :
+    impl(const std::string& ip_addr, uint16_t port, std::chrono::milliseconds timeout) :
     ip_address(ip_addr.data(), ip_addr.length()),
-    protocol_port(port) { }
+    protocol_port(port),
+    default_timeout(timeout) { }
 
     ~impl() STATICLIB_NOEXCEPT { }
 
@@ -60,11 +62,11 @@ public:
 
     virtual size_t available() = 0;
 
-    void write(wilton_socket&, sl::io::span<const char> data, std::chrono::milliseconds timeout);
+    uint32_t write(wilton_socket&, sl::io::span<const char> data, std::chrono::milliseconds timeout);
 
     sl::io::span<const char> read_some(wilton_socket&, uint32_t max_bytes_to_read, std::chrono::milliseconds timeout);
 
-    void read(wilton_socket&, sl::io::span<char> buffer, std::chrono::milliseconds timeout);
+    uint32_t read(wilton_socket&, sl::io::span<char> buffer, std::chrono::milliseconds timeout);
 };
 
 } // namespace

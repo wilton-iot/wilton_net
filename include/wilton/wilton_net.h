@@ -54,7 +54,8 @@ char* wilton_net_Socket_write(
         wilton_Socket* socket,
         const char* data,
         int data_len,
-        int timeout_millis);
+        int timeout_millis,
+        int* bytes_written);
 
 char* wilton_net_Socket_read_some(
         wilton_Socket* socket,

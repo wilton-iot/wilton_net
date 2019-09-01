@@ -50,11 +50,11 @@ public:
      */
     PIMPL_CONSTRUCTOR(wilton_socket)
 
-    void write(sl::io::span<const char> data, std::chrono::milliseconds timeout);
+    uint32_t write(sl::io::span<const char> data, std::chrono::milliseconds timeout);
 
     sl::io::span<const char> read_some(uint32_t max_bytes_to_read, std::chrono::milliseconds timeout);
 
-    void read(sl::io::span<char> buffer, std::chrono::milliseconds timeout);
+    uint32_t read(sl::io::span<char> buffer, std::chrono::milliseconds timeout);
 
 };
 

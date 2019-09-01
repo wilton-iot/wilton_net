@@ -32,22 +32,26 @@
 namespace wilton {
 namespace net {
 
-void wilton_socket::impl::write(wilton_socket&, sl::io::span<const char> data, std::chrono::milliseconds timeout) {
+uint32_t wilton_socket::impl::write(wilton_socket&, sl::io::span<const char> data, std::chrono::milliseconds timeout) {
+
+    // resolve timeout
+    auto tmt = 0 != timeout.count() ? timeout : default_timeout;
 
     // prepare state
     service.reset();
     asio::steady_timer timer{service};
     auto write_canceled = false;
     auto timer_canceled = false;
-    size_t written_total;
+    size_t written_total = 0;
     auto error = std::string();
 
     // start timer
-    timer.expires_from_now(timeout);
+    timer.expires_from_now(tmt);
 
     // write callback
     std::function<void(const std::error_code&, size_t)> writer;
     writer = [&](const std::error_code& ec, size_t bytes_written) {
+        written_total += bytes_written;
         if (write_canceled) return;
         if(ec) {
             error = "Write error, bytes total to write: [" + sl::support::to_string(data.size() + written_total) + "]" +
@@ -74,7 +78,7 @@ void wilton_socket::impl::write(wilton_socket&, sl::io::span<const char> data, s
         if (timer_canceled) return;
         write_canceled = true;
         this->cancel();
-        error = "Operation timed out, timeout millis: [" + sl::support::to_string(timeout.count()) + "]";
+        // do not error on timeout, just return the amount written
     });
 
     // perform connection, callbacks will be called only from the current thread
@@ -82,10 +86,16 @@ void wilton_socket::impl::write(wilton_socket&, sl::io::span<const char> data, s
 
     // check results
     if (!error.empty()) throw support::exception(TRACEMSG(error));
+
+    // return amount written
+    return static_cast<uint32_t>(written_total);
 }
 
 sl::io::span<const char> wilton_socket::impl::read_some(wilton_socket&, uint32_t max_bytes_to_read,
         std::chrono::milliseconds timeout) {
+
+    // resolve timeout
+    auto tmt = 0 != timeout.count() ? timeout : default_timeout;
 
     // prepare state
     read_buffer.resize(0);
@@ -96,7 +106,7 @@ sl::io::span<const char> wilton_socket::impl::read_some(wilton_socket&, uint32_t
     auto error = std::string();
 
     // start timer
-    timer.expires_from_now(timeout);
+    timer.expires_from_now(tmt);
 
     // read callback, see: http://think-async.com/Asio/asio-1.10.6/doc/asio/overview/core/reactor.html
     this->async_read_some([&](const std::error_code& ec) {
@@ -149,14 +159,19 @@ sl::io::span<const char> wilton_socket::impl::read_some(wilton_socket&, uint32_t
     }
 }
 
-void wilton_socket::impl::read(wilton_socket& facade, sl::io::span<char> buffer, std::chrono::milliseconds timeout) {
+uint32_t wilton_socket::impl::read(wilton_socket& facade, sl::io::span<char> buffer, std::chrono::milliseconds timeout) {
+
+    // resolve timeout
+    auto tmt = 0 != timeout.count() ? timeout : default_timeout;
+
+    // call read_some repeatedly
     uint64_t start = sl::utils::current_time_millis_steady();
-    uint64_t finish = start + timeout.count();
+    uint64_t finish = start + tmt.count();
     uint64_t cur = start;
     size_t read = 0;
     for (;;) {
         uint64_t passed = cur - start;
-        auto tm = std::chrono::milliseconds(timeout.count() - passed);
+        auto tm = std::chrono::milliseconds(tmt.count() - passed);
         auto span = facade.read_some(static_cast<uint32_t>(buffer.size() - read), tm);
         if (span.size() > 0) {
             std::memcpy(buffer.data() + read, span.data(), span.size());
@@ -170,14 +185,13 @@ void wilton_socket::impl::read(wilton_socket& facade, sl::io::span<char> buffer,
             break;
         }
     }
-    if (read < buffer.size()) throw support::exception(TRACEMSG(
-            "Short read from socket, bytes requested: [" + sl::support::to_string(buffer.size()) + "],"
-            " bytes read: [" + sl::support::to_string(read) + "],"
-            " timeout millis: [" + sl::support::to_string(timeout.count()) + "]"));
+
+    // return the amount read
+    return static_cast<uint32_t>(read);
 }
-PIMPL_FORWARD_METHOD(wilton_socket, void, read, (sl::io::span<char>)(std::chrono::milliseconds), (), support::exception);
+PIMPL_FORWARD_METHOD(wilton_socket, uint32_t, read, (sl::io::span<char>)(std::chrono::milliseconds), (), support::exception);
 // forward pure virtual methods
-PIMPL_FORWARD_METHOD(wilton_socket, void, write, (sl::io::span<const char>)(std::chrono::milliseconds), (), support::exception);
+PIMPL_FORWARD_METHOD(wilton_socket, uint32_t, write, (sl::io::span<const char>)(std::chrono::milliseconds), (), support::exception);
 PIMPL_FORWARD_METHOD(wilton_socket, sl::io::span<const char>, read_some, (uint32_t)(std::chrono::milliseconds), (), support::exception);
 
 } // namespace

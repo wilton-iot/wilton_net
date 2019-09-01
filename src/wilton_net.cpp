@@ -141,20 +141,22 @@ char* wilton_net_Socket_close(wilton_Socket* socket) /* noexcept */ {
 }
 
 char* wilton_net_Socket_write(wilton_Socket* socket, const char* data, int data_len,
-            int timeout_millis) /* noexcept */ {
+            int timeout_millis, int* bytes_written) /* noexcept */ {
     if (nullptr == socket) return wilton::support::alloc_copy(TRACEMSG("Null 'socket' parameter specified"));
     if (nullptr == data) return wilton::support::alloc_copy(TRACEMSG("Null 'data' parameter specified"));
     if (!sl::support::is_uint32_positive(data_len)) return wilton::support::alloc_copy(TRACEMSG(
             "Invalid 'data_len' parameter specified: [" + sl::support::to_string(data_len) + "]"));
-    if (!sl::support::is_uint32_positive(timeout_millis)) return wilton::support::alloc_copy(TRACEMSG(
+    if (!sl::support::is_uint32(timeout_millis)) return wilton::support::alloc_copy(TRACEMSG(
             "Invalid 'timeout_millis' parameter specified: [" + sl::support::to_string(timeout_millis) + "]"));
+    if (nullptr == bytes_written) return wilton::support::alloc_copy(TRACEMSG("Null 'bytes_written' parameter specified"));
     try {
         wilton::support::log_debug(logger, std::string("Writing data to socket,") +
                 " handle: [" + wilton::support::strhandle(socket) + "]," +
                 " data_len: [" + sl::support::to_string(data_len) +  "],"
                 " timeout: [" + sl::support::to_string(timeout_millis) + "] ...");
-        socket->impl().write({data, data_len}, std::chrono::milliseconds(timeout_millis));
-        wilton::support::log_debug(logger, "Write operation complete");
+        auto written = socket->impl().write({data, data_len}, std::chrono::milliseconds(timeout_millis));
+        wilton::support::log_debug(logger, "Write operation complete, bytes written: [" + sl::support::to_string(written) + "]");
+        *bytes_written = static_cast<int> (written);
         return nullptr;
     } catch (const std::exception& e) {
         return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
@@ -164,7 +166,7 @@ char* wilton_net_Socket_write(wilton_Socket* socket, const char* data, int data_
 char* wilton_net_Socket_read_some(wilton_Socket* socket, int timeout_millis,
         char** data_out, int* data_len_out) {
     if (nullptr == socket) return wilton::support::alloc_copy(TRACEMSG("Null 'socket' parameter specified"));
-    if (!sl::support::is_uint32_positive(timeout_millis)) return wilton::support::alloc_copy(TRACEMSG(
+    if (!sl::support::is_uint32(timeout_millis)) return wilton::support::alloc_copy(TRACEMSG(
             "Invalid 'timeout_millis' parameter specified: [" + sl::support::to_string(timeout_millis) + "]"));
     if (nullptr == data_out) return wilton::support::alloc_copy(TRACEMSG("Null 'data_out' parameter specified"));
     if (nullptr == data_len_out) return wilton::support::alloc_copy(TRACEMSG("Null 'data_len_out' parameter specified"));
@@ -176,7 +178,9 @@ char* wilton_net_Socket_read_some(wilton_Socket* socket, int timeout_millis,
                 std::chrono::milliseconds(timeout_millis));
         wilton::support::log_debug(logger, std::string("Read-some operation complete,") +
                 " bytes read: [" + sl::support::to_string(span.size()) + "]");
-        auto buf = wilton::support::make_const_span_buffer(span);
+        auto buf = span.size() > 0 ? 
+            wilton::support::make_const_span_buffer(span) :
+            wilton::support::make_empty_buffer();
         *data_out = buf.data();
         *data_len_out = buf.size_int();
         return nullptr;
@@ -190,7 +194,7 @@ char* wilton_net_Socket_read(wilton_Socket* socket, int bytes_to_read, int timeo
     if (nullptr == socket) return wilton::support::alloc_copy(TRACEMSG("Null 'socket' parameter specified"));
     if (!sl::support::is_uint32_positive(bytes_to_read)) return wilton::support::alloc_copy(TRACEMSG(
             "Invalid 'bytes_to_read' parameter specified: [" + sl::support::to_string(bytes_to_read) + "]"));
-    if (!sl::support::is_uint32_positive(timeout_millis)) return wilton::support::alloc_copy(TRACEMSG(
+    if (!sl::support::is_uint32(timeout_millis)) return wilton::support::alloc_copy(TRACEMSG(
             "Invalid 'timeout_millis' parameter specified: [" + sl::support::to_string(timeout_millis) + "]"));
     if (nullptr == data_out) return wilton::support::alloc_copy(TRACEMSG("Null 'data_out' parameter specified"));
     if (nullptr == data_len_out) return wilton::support::alloc_copy(TRACEMSG("Null 'data_len_out' parameter specified"));
@@ -206,12 +210,23 @@ char* wilton_net_Socket_read(wilton_Socket* socket, int bytes_to_read, int timeo
                 wilton_free(buf.data());
             }
         });
-        socket->impl().read(buf, std::chrono::milliseconds(timeout_millis));
+        auto read = socket->impl().read(buf, std::chrono::milliseconds(timeout_millis));
         wilton::support::log_debug(logger, std::string("Read operation complete,") +
-                " bytes read: [" + sl::support::to_string(buf.size()) + "]");
-        *data_out = buf.data();
-        *data_len_out = buf.size_int();
-        defer_killswitch = true;
+                " bytes read: [" + sl::support::to_string(read) + "]");
+        if (buf.size() == read) { // full read
+            *data_out = buf.data();
+            *data_len_out = buf.size_int();
+            defer_killswitch = true;
+        } else if (read > 0) { // partial read
+            auto res = wilton::support::alloc_span(read);
+            std::memcpy(res.data(), buf.data(), read);
+            *data_out = res.data();
+            *data_len_out = res.size_int();
+        } else { // empty read
+            auto res = wilton::support::make_empty_buffer();
+            *data_out = res.data();
+            *data_len_out = 0;
+        }
         return nullptr;
     } catch (const std::exception& e) {
         return wilton::support::alloc_copy(TRACEMSG(e.what() + "\nException raised"));
